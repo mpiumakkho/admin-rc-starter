@@ -1,0 +1,28 @@
+/* @host app-footer */
+.footer {
+  padding: .75rem 2rem;
+  color: var(--ui-muted);
+  font-size: .8125rem;
+
+  @media (max-width: 767px) {
+    padding: 1rem;
+  }
+}
+
+// Slim, so a page that fills the window (page-fit) keeps more room for its content.
+// Side by side from 576px; stacked and centered on phones.
+.footer-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .25rem;
+  padding-top: .75rem;
+  border-top: 1px solid var(--ui-border);
+  text-align: center;
+
+  @media (min-width: 576px) {
+    flex-direction: row;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+}

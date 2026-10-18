@@ -1,0 +1,432 @@
+/* @host app-sidebar */
+/* Sidebar */
+
+// Height of one top-level menu row: 9px padding, 20px line, 9px padding
+$menu-item-height: 38px;
+// Width of a label or a group's pages opening beside the icon-only menu
+$flyout-width: 200px;
+$icon-size: 1.125rem;
+// How a group opens and closes: a gentle start and a gentle end (--ui-ease-standard), the same for the height, the
+// pages and the chevron, so the chevron turns in step with the pages instead of jumping most of the way at once
+$menu-motion: var(--ui-duration-slow) var(--ui-ease-standard);
+
+// The menu's colors come from the --ui variables, except the current page's own navy
+:host {
+  --menu-text: var(--ui-neutral-text);
+  --menu-icon: var(--ui-subtle);
+  // The current page: navy on a blue-grey tint
+  --menu-active-bg: #e7e8f6;
+  --menu-active-text: #000572;
+  --menu-accent: #000572;
+}
+
+:host-context(.theme-dark) {
+  --menu-icon: var(--ui-muted);
+  // The current page: white on a lighter slate, with an indigo icon
+  --menu-active-bg: #334155;
+  --menu-active-text: var(--ui-heading);
+  --menu-accent: #818cf8;
+}
+
+.sidebar {
+  width: var(--app-sidebar-width);
+  min-height: calc(var(--ui-100vh) - var(--app-navbar-height));
+  border-inline-end: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  // In step with the navbar's logo area and the page's margin (app.component.scss)
+  transition: width var(--ui-duration) var(--ui-ease-standard), background-color var(--ui-duration) ease;
+}
+
+.menu {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: .75rem 0 2rem;
+  overflow: hidden;
+  list-style: none;
+
+  > .nav-item {
+    padding: 0 .75rem;
+
+    > .nav-link {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      min-height: $menu-item-height;
+      margin-bottom: 2px;
+      padding: .5625rem .75rem;
+      border-radius: var(--ui-radius);
+      color: var(--menu-text);
+      font-size: .875rem;
+      font-weight: 500;
+      line-height: 1.25;
+      text-decoration: none;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+      transition: background-color .15s ease, color .15s ease;
+
+      // A group's header is a button: no browser button look
+      &:is(button) {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        text-align: start;
+      }
+    }
+
+    &:not(.nav-category):not(.active) > .nav-link:hover {
+      background: var(--ui-hover);
+      color: var(--ui-heading);
+
+      .menu-icon {
+        color: var(--ui-heading);
+      }
+    }
+
+    &.active:not(.navbar-brand-mini-wrapper) > .nav-link {
+      background: var(--menu-active-bg);
+      color: var(--menu-active-text);
+      font-weight: 600;
+
+      .menu-icon,
+      .menu-arrow {
+        color: var(--menu-accent);
+      }
+    }
+
+    // An open group already marks the current page inside it; the header keeps only its colour
+    &.nav-group.active > .nav-link[aria-expanded="true"] {
+      background: transparent;
+
+      &:hover {
+        background: var(--ui-hover);
+      }
+    }
+  }
+}
+
+.menu-icon {
+  flex-shrink: 0;
+  color: var(--menu-icon);
+  font-size: $icon-size;
+  transition: color .15s ease;
+}
+
+.menu-title {
+  flex-grow: 1;
+  min-width: 0;
+  // Taller clipping box, same row height: Thai marks stacked above (สิทธิ์, ตั้ง) are not cut off
+  margin-block: -.3em;
+  padding-block: .3em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+// Points right while closed (left in right-to-left text) and turns clockwise to point down when open,
+// in step with the pages sliding open
+.menu-arrow {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  color: var(--ui-subtle);
+  font-size: .875rem;
+  transition: transform $menu-motion;
+
+  &:dir(rtl) {
+    transform: rotate(180deg);
+  }
+
+  [aria-expanded="true"] > & {
+    transform: rotate(90deg);
+  }
+}
+
+// How many things wait for the signed-in user on a page, such as roles to decide in an access review
+.menu-count {
+  flex-shrink: 0;
+  min-width: 1.25rem;
+  padding: .0625rem .375rem;
+  border-radius: 999px;
+  background: var(--ui-primary);
+  color: var(--ui-on-primary);
+  font-size: .6875rem;
+  font-weight: 600;
+  line-height: 1.125rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section headings */
+.menu > .nav-category > .nav-link {
+  min-height: 0;
+  margin: 0;
+  padding: 1.25rem .75rem .5rem;
+  color: var(--ui-subtle);
+  font-size: .71875rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  cursor: default;
+}
+
+/* Small logo, shown at the top of the icon-only sidebar */
+.menu > .navbar-brand-mini-wrapper {
+  display: none;
+
+  > .nav-link {
+    justify-content: center;
+    width: 100%;
+    margin: 0 0 .5rem;
+    padding: .5rem 0;
+
+    img {
+      width: 28px;
+      height: 28px;
+    }
+  }
+}
+
+/* A group's pages: the height eases open (grid rows from 0fr to 1fr, no measuring in script) while
+   the pages fade in and slide down a little */
+.sub-menu-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows $menu-motion;
+
+  // Closing, the pages fade quickly, before the height has gone
+  .sub-menu {
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity var(--ui-duration-fast) var(--ui-ease-in), transform $menu-motion;
+  }
+
+  // Opening, they fade in once the height has started to make room
+  &.open {
+    grid-template-rows: 1fr;
+
+    .sub-menu {
+      opacity: 1;
+      transform: none;
+      transition: opacity var(--ui-duration) ease .06s, transform $menu-motion;
+    }
+  }
+}
+
+.sub-menu-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sub-menu-wrap,
+  .sub-menu-wrap .sub-menu,
+  .menu-arrow {
+    transition: none !important;
+  }
+}
+
+/* Sub-menu: indented under a guide line that starts below the parent's icon */
+.sub-menu {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 .375rem;
+  margin-inline-start: calc(.75rem + #{$icon-size} / 2);
+  padding: .125rem 0;
+  border-inline-start: 1px solid var(--ui-border);
+  list-style: none;
+
+  .nav-link {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin: 1px 0;
+    margin-inline-start: .625rem;
+    padding: .4375rem .75rem;
+    border-radius: var(--ui-radius);
+    color: var(--ui-muted);
+    font-size: .875rem;
+    line-height: 1.4;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color .15s ease, color .15s ease;
+
+    &:hover {
+      background: var(--ui-hover);
+      color: var(--ui-heading);
+    }
+
+    // Marks the current page on the guide line
+    &.active {
+      color: var(--menu-active-text);
+      font-weight: 600;
+
+      &::before {
+        content: "";
+        position: absolute;
+        top: 7px;
+        bottom: 7px;
+        inset-inline-start: calc(-.625rem - 1.5px);
+        width: 2px;
+        border-radius: 2px;
+        background: var(--menu-accent);
+      }
+    }
+  }
+}
+
+/* On desktop the sidebar is pinned: it stays put while the page scrolls */
+@media (min-width: 992px) {
+  .sidebar {
+    position: fixed;
+    top: var(--app-navbar-height);
+    bottom: 0;
+    inset-inline-start: 0;
+    z-index: 11;
+  }
+
+  .menu {
+    max-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding-bottom: 3rem;
+  }
+}
+
+/* Icon-only menu: labels open in a flyout on hover. Wins over the overflow above, so the flyouts are not clipped. */
+@media (min-width: 992px) {
+  :host-context(.sidebar-icon-only) {
+    .menu {
+      overflow: visible;
+
+      > .nav-item {
+        position: relative;
+
+        > .nav-link {
+          justify-content: center;
+          padding-inline: 0;
+        }
+
+        .menu-title,
+        .menu-arrow,
+        .menu-count,
+        .sub-menu-wrap {
+          display: none;
+        }
+
+        // The label beside the icon, and under it a group's pages
+        &.hover-open {
+          > .nav-link .menu-title {
+            position: absolute;
+            top: 0;
+            inset-inline-start: 100%;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            width: $flyout-width;
+            height: $menu-item-height;
+            // The room kept for Thai marks in the menu is not needed in the flyout, which is taller
+            margin-block: 0;
+            padding: 0 1rem;
+            border: 1px solid var(--ui-border);
+            border-radius: var(--ui-radius-lg);
+            background: var(--ui-surface);
+            box-shadow: var(--ui-shadow-lg);
+            color: var(--ui-heading);
+            font-weight: 600;
+          }
+
+          > .nav-link[aria-expanded] .menu-title {
+            border-bottom-color: transparent;
+            border-end-start-radius: 0;
+            border-end-end-radius: 0;
+            // The list below carries the shadow, so none falls between the two
+            box-shadow: 0 -4px 12px -6px rgba(15, 23, 42, .12);
+          }
+
+          .sub-menu-wrap {
+            position: absolute;
+            top: $menu-item-height;
+            inset-inline-start: 100%;
+            z-index: 999;
+            display: block;
+            width: $flyout-width;
+            border: 1px solid var(--ui-border);
+            border-top: 0;
+            border-radius: 0 0 var(--ui-radius-lg) var(--ui-radius-lg);
+            background: var(--ui-surface);
+            box-shadow: var(--ui-shadow-lg);
+          }
+
+          .sub-menu {
+            margin: 0;
+            padding: .375rem;
+            border: 0;
+
+            .nav-link {
+              margin: 0;
+
+              &.active::before {
+                display: none;
+              }
+            }
+          }
+        }
+      }
+
+      > .nav-category {
+        display: none;
+      }
+
+      > .navbar-brand-mini-wrapper {
+        display: block;
+      }
+    }
+  }
+}
+
+/* Below 992px the menu slides in from the left, under the navbar, over a dimmed page */
+@media (max-width: 991px) {
+  .sidebar-offcanvas {
+    position: fixed;
+    top: var(--app-navbar-height);
+    bottom: 0;
+    left: 0;
+    z-index: 1029;
+    max-width: calc(var(--ui-100vw) - 3rem);
+    overflow: auto;
+    transform: translateX(-100%);
+    // Hidden once it has slid away, so its links are out of the tab order
+    visibility: hidden;
+    // A long way to slide: it starts and ends gently
+    transition: transform var(--ui-duration-slow) var(--ui-ease-standard), visibility 0s linear var(--ui-duration-slow);
+
+    &.active {
+      transform: none;
+      visibility: visible;
+      box-shadow: var(--ui-shadow-lg);
+      transition: transform var(--ui-duration-slow) var(--ui-ease-standard);
+    }
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: var(--app-navbar-height) 0 0;
+    z-index: 1028;
+    background: rgba(15, 23, 42, .4);
+    animation: backdrop-in var(--ui-duration-slow) ease;
+  }
+}
+
+@media (min-width: 992px) {
+  .sidebar-backdrop {
+    display: none;
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+}

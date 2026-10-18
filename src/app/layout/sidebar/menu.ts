@@ -1,0 +1,39 @@
+import type { Permission } from '../../user-management/data/models';
+import type { UiIcon } from '../../user-management/ui/core/types';
+import { USER_MANAGEMENT_MENU, USER_MANAGEMENT_OVERVIEW } from '../../user-management/user-management.menu';
+
+// The sidebar is drawn from this list. Labels are translation keys.
+
+export interface MenuLink {
+  label: string;
+  link: string;
+  /** Shown only to people whose role has this permission */
+  permission?: Permission;
+  /** And only while this setting is on */
+  setting?: 'branchesEnabled';
+  /** Also shown, with a count of what waits there, to people who take part in what the page lists */
+  tasks?: 'accessReviews';
+}
+
+export interface MenuItem {
+  label: string;
+  icon: UiIcon;
+  /** A page; leave it out for a group */
+  link?: string;
+  permission?: Permission;
+  /** Pages in a group, which opens and closes like a dropdown instead of navigating */
+  children?: MenuLink[];
+}
+
+export interface MenuSection {
+  /** A heading above the section; leave it out for the top of the menu */
+  label?: string;
+  items: MenuItem[];
+}
+
+export const MENU: MenuSection[] = [
+  // The first page after signing in, on its own at the top
+  { items: [USER_MANAGEMENT_OVERVIEW] },
+  // Each part of the app brings its pages as one group; add other modules' groups here
+  { label: 'Management', items: [USER_MANAGEMENT_MENU] },
+];

@@ -1,0 +1,37 @@
+/* @host app-spinner */
+// Covers the page area while the next page loads; shows only when loading takes a moment, so quick loads never flash
+.spinner-wrapper {
+  position: fixed;
+  inset: var(--app-navbar-height) 0 0 var(--app-sidebar-width);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--ui-bg) 75%, transparent);
+  animation: spinner-in .2s ease .2s both;
+
+  @media (max-width: 991px) {
+    inset-inline-start: 0;
+  }
+}
+
+.donut {
+  width: 4rem;
+  height: 4rem;
+  border: .3rem solid color-mix(in srgb, var(--ui-success) 30%, transparent);
+  border-top-color: var(--ui-success);
+  border-radius: 50%;
+  animation: spin 1.5s linear infinite;
+}
+
+@keyframes spinner-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
