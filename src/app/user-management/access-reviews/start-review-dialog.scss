@@ -1,0 +1,53 @@
+/* @host app-start-review-dialog */
+.review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.review-scope {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 1rem;
+}
+
+.review-covers {
+  margin: -.25rem 0 0;
+  color: var(--ui-muted);
+  font-size: .8125rem;
+}
+
+.review-covers-none {
+  color: var(--ui-warning-text);
+}
+
+.review-date {
+  max-width: 14rem;
+}
+
+.review-reviewers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .375rem;
+  margin: .5rem 0 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: inline-flex;
+    align-items: center;
+    gap: .125rem;
+    padding-inline-start: .625rem;
+    border: 1px solid var(--ui-border);
+    border-radius: 999px;
+    background: var(--ui-surface-muted);
+    color: var(--ui-heading);
+    font-size: .8125rem;
+  }
+}
+
+.review-problem {
+  margin: 0;
+  color: var(--ui-danger-text);
+  font-size: .8125rem;
+}

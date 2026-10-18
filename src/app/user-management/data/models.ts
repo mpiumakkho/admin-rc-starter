@@ -1,0 +1,392 @@
+import { UiTone } from '../ui';
+
+export type UserStatus = 'active' | 'invited' | 'suspended';
+
+/** The languages emails are written in: Thai and English, as the app's */
+export type Language = 'th' | 'en';
+
+/** Everything a role can allow; catalog.ts groups and labels them */
+export type Permission =
+  | 'users.view'
+  | 'users.create'
+  | 'users.edit'
+  | 'users.delete'
+  | 'roles.view'
+  | 'roles.manage'
+  | 'activity.view'
+  | 'activity.export'
+  | 'settings.view'
+  | 'settings.manage'
+  | 'branches.view'
+  | 'branches.manage'
+  | 'reviews.manage';
+
+export interface User {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  department: string;
+  /** The branch they belong to, as a Google Workspace user is in one organizational unit; null for none */
+  branchId: string | null;
+  /** Every role given to them: the ones they hold now, scheduled ones and expired ones (see roleAssignmentState) */
+  roles: RoleAssignment[];
+  status: UserStatus;
+  /** Image URL or data URL; empty shows initials */
+  avatar: string;
+  createdAt: string;
+  /** Never set for people who have not signed in yet */
+  lastActiveAt: string | null;
+  /** Signs in with a code from an authenticator app as well as the password; only the server changes it */
+  twoFactor?: boolean;
+  /**
+   * The language of their emails: the one they last used the app in, which Session keeps up to date; null until then,
+   * for the settings' defaultLanguage (API.md, "The language of emails")
+   */
+  language: Language | null;
+}
+
+/** A new user: what a form edits, and the roles they start with (none: the default role from the settings) */
+export type UserDraft = Omit<User, 'id' | 'createdAt' | 'lastActiveAt' | 'twoFactor' | 'roles' | 'branchId' | 'language'> & {
+  roles: RoleGrant[];
+  /** Left out: no branch */
+  branchId?: string | null;
+  /** Left out or null: the settings' defaultLanguage, until they use the app */
+  language?: Language | null;
+};
+
+/** What PATCH /users/:id changes; roles change through role assignments */
+export type UserChanges = Partial<Omit<UserDraft, 'roles'>>;
+
+/**
+ * One role given to one person, for a time or for good, as NIST RBAC's user assignment with Microsoft Entra's
+ * start and end. It counts while startsAt <= now < endsAt.
+ */
+export interface RoleAssignment {
+  id: string;
+  userId: string;
+  roleId: string;
+  /** Its scope, as Azure RBAC's: null for the whole organization, or the one branch it applies in */
+  branchId: string | null;
+  startsAt: string;
+  /** null: for good */
+  endsAt: string | null;
+  /** Why it was given; empty when nobody said */
+  reason: string;
+  /** null: given by the server, such as the default role for an imported user */
+  assignedById: string | null;
+  assignedAt: string;
+}
+
+/** A role to give someone */
+export interface RoleGrant {
+  roleId: string;
+  /** Left out or null: the whole organization */
+  branchId?: string | null;
+  /** Left out, or earlier than now: from now */
+  startsAt?: string;
+  /** null: for good */
+  endsAt: string | null;
+  reason?: string;
+}
+
+export interface RoleAssignmentDraft extends RoleGrant {
+  userId: string;
+}
+
+/** What PATCH /role-assignments/:id changes: extend, shorten or renew it, or correct the reason */
+export interface RoleAssignmentChanges {
+  endsAt?: string | null;
+  reason?: string;
+}
+
+/** POST /role-assignments/batch: give several people a role, or take one away from them */
+/**
+ * Roles nobody may hold at the same time, so that one person cannot both do and check the same work: NIST RBAC's
+ * static separation of duty (API.md, "Conflicting roles")
+ */
+export interface RoleConflict {
+  id: string;
+  name: string;
+  description: string;
+  /** Two or more roles */
+  roleIds: string[];
+}
+
+export type RoleConflictDraft = Pick<RoleConflict, 'name' | 'roleIds'> & { description?: string };
+
+/** A role for several people, or one taken away from them, with a reason (see ReasonAction) */
+export type RoleAssignmentBatch = { add: RoleGrant } | { removeRoleId: string; reason?: string };
+
+/**
+ * The changes that take or reset someone's access, which carry a reason the activity log keeps, as Microsoft Entra asks
+ * for a justification; the settings' reasonsRequired lists those that must have one (API.md, "Reasons")
+ */
+export type ReasonAction = 'status' | 'delete' | 'removeRole' | 'resetSignIn' | 'endSessions';
+
+/** A browser someone is signed in on */
+export interface UserSession {
+  id: string;
+  userId: string;
+  /** When they signed in there */
+  createdAt: string;
+  lastSeenAt: string;
+  ip: string;
+  browser: string;
+  os: string;
+  /** The session the request came from */
+  current?: boolean;
+}
+
+/** What an authenticator app needs to start making codes */
+export interface TwoFactorSetup {
+  /** Base32, for typing in by hand */
+  secret: string;
+  /** otpauth:// address, for the QR code */
+  uri: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description: string;
+  tone: UiTone;
+  permissions: Permission[];
+  /** How the role may be given */
+  assignment: RoleAssignmentRules;
+  /** Built in: its name, description and permissions come from the server's code; only its color and assignment rules change */
+  system: boolean;
+}
+
+/** A role's own rules for giving it, as Microsoft Entra PIM's role settings */
+export interface RoleAssignmentRules {
+  /** Each assignment must end within this many days of starting; null: no limit, and it may be for good */
+  maxDays: number | null;
+  /** Each assignment needs a reason */
+  reasonRequired: boolean;
+}
+
+/** A role to create or change; without assignment rules, a new role may be given for good, without a reason */
+export type RoleDraft = Omit<Role, 'id' | 'system' | 'assignment'> & { assignment?: RoleAssignmentRules };
+
+/** A site or office people belong to, and roles can be limited to */
+export interface Branch {
+  id: string;
+  /** Short, unique and upper-case, such as "CNX" */
+  code: string;
+  name: string;
+  /** Closed: it keeps its people and their roles, but nobody new joins it or gets a role there */
+  active: boolean;
+  createdAt: string;
+}
+
+export type BranchDraft = Pick<Branch, 'code' | 'name'>;
+
+/** What PATCH /branches/:id changes */
+export type BranchChanges = Partial<BranchDraft & Pick<Branch, 'active'>>;
+
+/** How user management behaves, changed on the settings page */
+export interface AdminSettings {
+  /** The role a new user starts with */
+  defaultRoleId: string;
+  /** New and changed emails must end in one of these domains, such as "example.com"; empty allows any */
+  allowedDomains: string[];
+  /** How long an invitation link works */
+  inviteExpiryDays: number;
+  /** Signs people out after this long without using the app; 0 keeps them signed in */
+  sessionTimeoutMinutes: number;
+  /** Roles whose holders must use two-step sign-in before they can do anything else */
+  twoFactorRoleIds: string[];
+  /** The shortest password someone can set */
+  passwordMinLength: number;
+  /** How many of someone's most recent passwords, the current one included, they cannot choose again; 0 allows any */
+  passwordHistory: number;
+  /** Activity older than this is deleted */
+  activityRetentionDays: number;
+  /** Shows the branches page and the branch fields; turned off, the data stays */
+  branchesEnabled: boolean;
+  /** The changes that must have a reason */
+  reasonsRequired: ReasonAction[];
+  /**
+   * How long after signing in, or confirming their password, someone can make the risky changes (giving roles, deleting
+   * people, the settings…) before the password is asked again; 0 never asks
+   */
+  reauthMinutes: number;
+  /** Every night, accounts nobody used for this many days are suspended; 0 leaves them */
+  suspendInactiveDays: number;
+  /** The language of emails to people whose own language is not known yet, such as someone just invited */
+  defaultLanguage: Language;
+}
+
+/** Two-step sign-in is on: the user, and their first recovery codes, shown this once */
+export interface TwoFactorConfirmation {
+  user: User;
+  /** Ten single-use codes such as "abcde-fghjk", for when the phone is lost */
+  recoveryCodes: string[];
+}
+
+/** What a new password must be, from the settings; readable before signing in, for the links in emails */
+export interface PasswordPolicy {
+  minLength: number;
+  history: number;
+}
+
+/**
+ * A round of checking that people still need the roles they hold, as Microsoft Entra's access reviews and the audits of
+ * ISO 27001 ask (API.md, "Access reviews"). The people who look after each person decide by dueAt; closing it takes away
+ * the roles decided 'remove'.
+ */
+export interface AccessReview {
+  id: string;
+  name: string;
+  /** The role it covers; null for every role */
+  roleId: string | null;
+  /** The branch whose people it covers (User.branchId); null for everyone */
+  branchId: string | null;
+  /** People named to decide all of it, besides the people's administrators */
+  reviewerIds: string[];
+  /** When the server closes it by itself */
+  dueAt: string;
+  status: AccessReviewStatus;
+  /** null: the person who started it has been deleted */
+  createdById: string | null;
+  createdAt: string;
+  closedAt: string | null;
+  /** null while open, or when the server closed it at dueAt */
+  closedById: string | null;
+  /** How many role assignments it covers, and how many have a decision */
+  itemCount: number;
+  decidedCount: number;
+  /** How many the signed-in user may decide that wait for a decision; 0 once closed */
+  waitingCount: number;
+}
+
+export type AccessReviewStatus = 'open' | 'closed';
+
+/** A new review: of one role or every role, of one branch's people or everyone */
+export interface AccessReviewDraft {
+  name: string;
+  roleId?: string | null;
+  branchId?: string | null;
+  dueAt: string;
+  reviewerIds?: string[];
+}
+
+export type AccessReviewDecision = 'keep' | 'remove';
+
+/** What closing the review did with an assignment (API.md, "Access reviews") */
+export type AccessReviewOutcome = 'kept' | 'removed' | 'not_reviewed' | 'gone' | 'last_administrator';
+
+/**
+ * One role assignment under review. The person, the role and the dates are kept as they were when the review started,
+ * as text, so the report reads the same after they change or are deleted.
+ */
+export interface AccessReviewItem {
+  id: string;
+  assignmentId: string;
+  userId: string;
+  userName: string;
+  email: string;
+  roleId: string;
+  roleName: string;
+  /** The assignment's scope: null for the whole organization */
+  branchId: string | null;
+  startsAt: string;
+  endsAt: string | null;
+  decision: AccessReviewDecision | null;
+  /** Why, as the person who decided gave it; empty when none */
+  note: string;
+  decidedById: string | null;
+  /** Kept as text; empty while undecided */
+  decidedByName: string;
+  decidedAt: string | null;
+  /** Set when the review closes */
+  outcome: AccessReviewOutcome | null;
+  /** The signed-in user may decide it now: the review is open, the role is not theirs, and it is theirs to decide */
+  canDecide: boolean;
+}
+
+/** A part of the activity log, from one moment up to (not including) another; either end may be left open */
+export interface ActivityRange {
+  from?: string;
+  to?: string;
+}
+
+export type ActivityAction =
+  | 'user.created'
+  | 'user.updated'
+  | 'user.deleted'
+  | 'user.invited'
+  | 'user.suspended'
+  | 'user.activated'
+  | 'user.password_reset'
+  | 'user.password_changed'
+  | 'role.created'
+  | 'role.updated'
+  | 'role.deleted'
+  | 'role_assignment.added'
+  | 'role_assignment.updated'
+  | 'role_assignment.removed'
+  | 'role_assignment.expired'
+  | 'role_conflict.created'
+  | 'role_conflict.updated'
+  | 'role_conflict.deleted'
+  | 'settings.updated'
+  | 'branch.created'
+  | 'branch.updated'
+  | 'branch.deleted'
+  | 'auth.sign_in'
+  | 'auth.sessions_ended'
+  | 'auth.two_factor_on'
+  | 'auth.two_factor_off'
+  | 'auth.recovery_code_used'
+  | 'auth.recovery_codes_created'
+  | 'auth.sign_in_failed'
+  | 'auth.account_locked'
+  | 'access_review.started'
+  | 'access_review.decided'
+  | 'access_review.closed'
+  | 'access_review.deleted';
+
+/** One field an action changed. Values are stored raw (a role id, a status) and formatted for display. */
+export interface ActivityChange {
+  /** A User or Role field, such as "department", "roleId" or "permissions" */
+  field: string;
+  from?: string | null;
+  to?: string | null;
+  /** For list fields such as permissions */
+  added?: string[];
+  removed?: string[];
+}
+
+export interface Activity {
+  id: string;
+  at: string;
+  /** null: the server did it by itself, such as ending an assignment on time */
+  actorId: string | null;
+  action: ActivityAction;
+  /** Who or what the action was about, kept as text so it survives deletion */
+  targetLabel: string;
+  targetId?: string;
+  /** Where the request came from */
+  ip: string;
+  browser: string;
+  os: string;
+  changes?: ActivityChange[];
+  /** Why, as the person who made the change gave it */
+  reason?: string;
+}
+
+export function fullName(user: Pick<User, 'firstName' | 'lastName'>): string {
+  return `${user.firstName} ${user.lastName}`.trim();
+}
+
+/**
+ * What an account button shows for the signed-in person: their name, then their main role and how many more, such as
+ * "Henry Klein, Administrator +1". The button's name holds it as shown, so a voice command with what is on it finds it
+ * (WCAG 2.5.3, Label in Name).
+ */
+export function accountText(user: Pick<User, 'firstName' | 'lastName'>, roleName: string | undefined, roleCount: number): string {
+  return fullName(user) + (roleName ? `, ${roleName}${roleCount > 1 ? ` +${roleCount - 1}` : ''}` : '');
+}

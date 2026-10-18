@@ -1,0 +1,333 @@
+/* @host app-roles */
+.roles-layout {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  align-items: start;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+
+  // One column: the dropdown takes the list's place, right above the editor
+  @media (max-width: 991px) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+// Where the page fills the window (page-fit), both cards reach the bottom and scroll inside
+@media (min-width: 992px) and (min-height: 600px) {
+  .roles-layout {
+    flex: 1 1 0;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+    margin-bottom: 0;
+  }
+
+  .role-panel,
+  .editor {
+    align-self: stretch;
+  }
+}
+
+@media (max-width: 991px) {
+  .role-panel {
+    display: none;
+  }
+}
+
+@media (min-width: 992px) {
+  .role-picker {
+    display: none;
+  }
+}
+
+/* Role list */
+// Lined up with the card title
+.role-search {
+  padding: 0 1.5rem .75rem;
+}
+
+// Rows like a table's, edge to edge; a shadow at the top or bottom edge shows there is more to scroll to
+.role-list {
+  --role-list-shadow: rgba(15, 23, 42, .12);
+
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--ui-border);
+  border-radius: 0 0 var(--ui-radius-lg) var(--ui-radius-lg);
+  background:
+    linear-gradient(var(--ui-surface) 30%, transparent) center top / 100% 2.5rem no-repeat local,
+    linear-gradient(transparent, var(--ui-surface) 70%) center bottom / 100% 2.5rem no-repeat local,
+    linear-gradient(var(--role-list-shadow), transparent) center top / 100% .875rem no-repeat scroll,
+    linear-gradient(transparent, var(--role-list-shadow)) center bottom / 100% .875rem no-repeat scroll var(--ui-surface);
+  overscroll-behavior: contain;
+
+  :host-context(.theme-dark) &,
+  :host-context([data-theme="dark"]) & {
+    --role-list-shadow: rgba(0, 0, 0, .4);
+  }
+}
+
+.role-item {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: .75rem;
+  width: 100%;
+  padding: .75rem 1.5rem;
+  border: 0;
+  border-bottom: 1px solid var(--ui-border);
+  background: transparent;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background-color .15s ease;
+
+  &:hover {
+    background: var(--ui-hover);
+  }
+
+  // Inside the scrolling list an outer ring would be cut off, so the focus ring is drawn inside the row
+  &:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 2px var(--ui-primary);
+  }
+
+  &.active {
+    background: var(--ui-primary-soft);
+    box-shadow: inset 3px 0 0 var(--ui-primary);
+  }
+
+  &.active:focus-visible {
+    box-shadow: inset 3px 0 0 var(--ui-primary), inset 0 0 0 2px var(--ui-primary);
+  }
+
+  // The card's own edge closes the list
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.role-empty {
+  margin: 0;
+  padding: 1.5rem;
+  color: var(--ui-muted);
+  font-size: .8125rem;
+  text-align: center;
+}
+
+.role-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  margin-top: .375rem;
+  border-radius: 50%;
+}
+
+.role-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.role-name {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  color: var(--ui-heading);
+  font-size: .875rem;
+  font-weight: 600;
+
+  ng-icon {
+    color: var(--ui-subtle);
+    font-size: .8125rem;
+  }
+}
+
+// One line each, so the list stays even; the whole description is in the row's tooltip and the editor
+.role-description {
+  overflow: hidden;
+  color: var(--ui-muted);
+  font-size: .75rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-count {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  color: var(--ui-muted);
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+// Colors shared by the list dots and the swatches
+.tone-primary { background: #6366f1; }
+.tone-info { background: #0ea5e9; }
+.tone-success { background: #10b981; }
+.tone-warning { background: #f59e0b; }
+.tone-danger { background: #ef4444; }
+.tone-neutral { background: #94a3b8; }
+
+/* Editor */
+.editor-note {
+  margin-bottom: 1rem;
+}
+
+// Name, description and color share a row as the editor's own width allows, not the window's: beside the role
+// list on a mid-sized screen the editor is much narrower than the window
+.editor-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+@container editor (min-width: 440px) {
+  .editor-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr);
+  }
+
+  .tone-field {
+    grid-column: 1 / -1;
+  }
+}
+
+@container editor (min-width: 680px) {
+  .editor-fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+  }
+
+  .tone-field {
+    grid-column: auto;
+  }
+}
+
+.field-title {
+  display: block;
+  margin-bottom: .375rem;
+  color: var(--ui-text);
+  font-size: .8125rem;
+  font-weight: 500;
+}
+
+.tone-swatches {
+  display: flex;
+  gap: .375rem;
+  height: 40px;
+  align-items: center;
+}
+
+.swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--ui-surface);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--ui-border);
+  cursor: pointer;
+  transition: box-shadow .15s ease, transform .15s ease;
+
+  &:hover:not(:disabled) {
+    transform: scale(1.1);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &:disabled:not(.selected) {
+    opacity: .45;
+  }
+
+  &.selected {
+    box-shadow: 0 0 0 2px var(--ui-heading);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--ui-ring);
+  }
+}
+
+.matrix {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.matrix-group {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  overflow: hidden;
+}
+
+.matrix-head {
+  padding: .75rem 1rem;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface-muted);
+}
+
+.matrix-title {
+  color: var(--ui-heading);
+  font-weight: 600;
+}
+
+.matrix-items {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  padding: 1rem;
+}
+
+.permission-key {
+  margin-inline-start: .375rem;
+  color: var(--ui-subtle);
+  font-family: var(--ui-font-mono);
+  font-size: .6875rem;
+}
+
+// Clear of the fixed navbar when scrolled into view on smaller screens
+.editor {
+  container: editor / inline-size;
+}
+
+.editor-footer .delete {
+  margin-inline-end: auto;
+}
+
+// Phones: the buttons fill their rows instead of leaving one alone on the right
+@media (max-width: 575px) {
+  .editor-footer > * {
+    flex: 1 1 auto;
+  }
+
+  .editor-footer .delete {
+    margin-inline-end: 0;
+  }
+}
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.reason-field {
+  display: flex;
+  align-items: flex-end;
+  padding-bottom: .5rem;
+}

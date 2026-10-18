@@ -1,0 +1,110 @@
+/* @host app-access-reviews */
+:host {
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1.5rem;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.toolbar-search {
+  flex: 0 1 300px;
+}
+
+.toolbar-chips {
+  min-width: 0;
+  margin-inline-start: auto;
+}
+
+.table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .625rem 1.5rem;
+  border-top: 1px solid var(--ui-border);
+  color: var(--ui-muted);
+  font-size: .8125rem;
+}
+
+.review-name {
+  color: var(--ui-heading);
+  font-weight: 500;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.muted {
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+
+// A bar of how many are decided, with the numbers beside it
+.cell-progress {
+  white-space: nowrap;
+}
+
+.progress {
+  display: inline-block;
+  width: 5rem;
+  height: .375rem;
+  margin-inline-end: .5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ui-neutral-soft);
+  vertical-align: middle;
+}
+
+.progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ui-primary);
+}
+
+.progress-text {
+  color: var(--ui-muted);
+  font-size: .8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+// Less important columns give way on smaller screens
+@media (max-width: 991px) {
+  .hide-md {
+    display: none;
+  }
+}
+
+@media (max-width: 575px) {
+  .hide-sm,
+  .progress {
+    display: none;
+  }
+
+  .toolbar {
+    padding: .75rem 1rem;
+  }
+
+  .toolbar-search {
+    flex: 1 1 100%;
+  }
+
+  .toolbar-chips {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+
+  .table-footer {
+    padding-inline: 1rem;
+  }
+}

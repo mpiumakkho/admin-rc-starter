@@ -1,0 +1,17 @@
+/* @host app-role-badges */
+:host {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .25rem;
+}
+
+.role-badge-clock {
+  margin-inline-start: .125rem;
+  font-size: .75rem;
+}
+
+.role-badges-none {
+  color: var(--ui-muted);
+  font-size: .8125rem;
+}

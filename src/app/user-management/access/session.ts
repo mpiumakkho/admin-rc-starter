@@ -1,0 +1,501 @@
+import i18next from 'i18next';
+import { useMemo } from 'react';
+import { useStore } from 'zustand';
+import { createStore } from 'zustand/vanilla';
+
+import { adminApi, signInPath } from '../config';
+import {
+  allows, branchesWith, branchPermissionsOf, canGiveRole, canManageUser, holdsAll, permissionsOf, type Grants,
+} from '../data/access-rules';
+import { activeRolesOf, adminStore, type AdminState } from '../data/admin-store';
+import { EMAIL_LANGUAGES } from '../data/catalog';
+import { memoSelector } from '../data/memo';
+import type { Language, Permission, Role, User } from '../data/models';
+import { idleTimeoutLabel, translate } from '../shared/formatting';
+import { uiToast, useUiAccessibleView } from '../ui';
+
+/** What counts as using the app, for signing out when idle */
+const ACTIVITY_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
+/** How often the idle timer looks at the clock */
+const IDLE_CHECK_MS = 15_000;
+/** How long before signing out when idle the app warns */
+const IDLE_WARNING_MS = 60_000;
+/** When the app was last used in any tab of this browser, so tabs share one idle timer and a reload does not reset it */
+const LAST_ACTIVE_KEY = 'admin-last-active';
+
+/** Where someone goes whose role requires two-step sign-in while it is off; nothing else opens until it is on */
+export const TWO_FACTOR_SETUP_PATH = '/setup-two-factor';
+
+/** Navigation state that lets a signed-in user onto the sign-in page while signing out */
+export const SIGNING_OUT = 'signingOut';
+
+let signingOut = false;
+
+/** Whether a sign-out is on its way to the sign-in page: the sign-in page's guard lets the signed-in user through then */
+export function isSigningOut(): boolean {
+  return signingOut;
+}
+
+/** Why someone was sent back to the sign-in page, as ?expired=… */
+export type SessionEndReason = 'ended' | 'idle';
+
+/** How the session moves between pages: the app's router, set when it starts (main.tsx) */
+export type SessionNavigate = (to: string, options?: { queryParams?: Record<string, string>; state?: Record<string, unknown> }) => Promise<void>;
+
+interface SessionState {
+  /** The account the server signed in. Once the data loads, the store's copy takes over, so edits show at once. */
+  account: User | null;
+  /**
+   * In the accessible view, why the session ended while the page stays as it was, for signing in again over it
+   * (ReauthDialog, WCAG 2.2.5) rather than being taken to the sign-in page (3.2.5). Null while signed in.
+   */
+  paused: SessionEndReason | null;
+}
+
+/**
+ * Who is signed in and what their role lets them do, as of one moment. Pages ask it before showing an action:
+ *
+ *   {session.can('users.delete') && <UiButton …>Delete</UiButton>}
+ *
+ * It only hides what the server would refuse anyway; the server checks every request itself.
+ */
+export interface SessionView {
+  user: User | null;
+  userId: string | null;
+  signedIn: boolean;
+  /** The roles the signed-in user holds now, the ones with most permissions first */
+  roles: Role[];
+  /** The role to name them by: the one with most permissions */
+  role: Role | undefined;
+  /** Every permission of the roles they hold now, together; follows assignments as they start and end */
+  permissions: ReadonlySet<Permission>;
+  /** What roles limited to a branch allow there, by branch id, on top of permissions (Azure RBAC's scopes) */
+  branchPermissions: ReadonlyMap<string, ReadonlySet<Permission>>;
+  /** Both together, for the rules in access-rules.ts */
+  grants: Grants;
+  /** The role requires two-step sign-in and it is off: only the setup page opens (API.md, "Roles that must use…") */
+  twoFactorSetupRequired: boolean;
+  paused: SessionEndReason | null;
+  /**
+   * A risky change was refused with reauth_required and waits for the password (ReauthDialog): reauthenticate() sends
+   * it again, cancelReauth() lets it fail (API.md, "Confirming who you are")
+   */
+  reauthRequested: boolean;
+  /**
+   * Whether the signed-in user has a permission: across the whole organization, or, given a branch, there too through a
+   * role limited to it. User management asks without a branch; the app's own modules ask about the branch of what
+   * they show, such as an order's branch.
+   */
+  can(permission: Permission, branchId?: string | null): boolean;
+  /**
+   * Whether the signed-in user has a permission anywhere: across the whole organization, or, for the user-management
+   * permissions a role limited to a branch gives (BRANCH_SCOPED_PERMISSIONS), in some branch. Menus, guards and buttons
+   * for a whole page ask this; what to do with one person asks canOn().
+   */
+  canSomewhere(permission: Permission): boolean;
+  /**
+   * Whether the signed-in user may use a user-management permission over the people of a branch, or of none (null), or
+   * for an assignment in that scope (API.md, "Branch administrators")
+   */
+  allows(permission: Permission, branchId: string | null): boolean;
+  /**
+   * Whether the signed-in user may do this to a person: they have the permission over the person's branch, and every
+   * permission of each role the person holds now or later, in that role's scope (API.md, rules 1 and 3). The rules about
+   * yourself, such as not changing your own roles, are the caller's.
+   */
+  canOn(permission: Permission, user: Pick<User, 'roles' | 'branchId'>): boolean;
+  /** The branches where the signed-in user has a permission through a role limited to them; with it everywhere, all */
+  branchesWith(permission: Permission): string[];
+  isSelf(user: Pick<User, 'id'> | null | undefined): boolean;
+  /** Whether the signed-in user may edit or copy this role: it grants nothing they lack for the whole organization */
+  canAssign(role: Pick<Role, 'permissions'> | undefined): boolean;
+  /**
+   * Whether the signed-in user may give this role, or change or take away an assignment of it, in a scope (null: the
+   * whole organization): the permission (users.edit, or users.create for a new user's roles) there, and every
+   * permission of the role there (API.md, rule 2)
+   */
+  canGive(role: Pick<Role, 'permissions'> | undefined, branchId: string | null, permission?: Permission): boolean;
+  /** Whether the signed-in user may change this person in some way: themselves, or someone they may edit, invite or delete */
+  canManage(user: Pick<User, 'id' | 'roles' | 'branchId'>): boolean;
+  /** Whether the signed-in user can edit this person's profile: their own name, phone and photo always */
+  canEditProfile(user: Pick<User, 'id' | 'roles' | 'branchId'>): boolean;
+  /** The first page the signed-in user can open: the overview, or their own profile when nothing else is allowed */
+  homeUrl(): string;
+}
+
+const buildView = memoSelector(
+  ([session, admin]: [SessionState, AdminState]) => [
+    session.account, session.paused, admin.users, admin.roles, admin.now, admin.branches, admin.twoFactorSetupRequired, admin.reauthRequested, admin,
+  ] as const,
+  (account, paused, users, roles, now, branches, setupRequired, reauthRequested, admin): SessionView => {
+    const user = account ? users.find(item => item.id === account.id) ?? account : null;
+    const userId = account?.id ?? null;
+    const signedIn = account !== null;
+    const userRoles = activeRolesOf(admin, user);
+    const permissions = permissionsOf(user, roles, now);
+    const branchPermissions = branchPermissionsOf(user, roles, now);
+    const grants: Grants = { organization: permissions, branches: branchPermissions };
+    const can = (permission: Permission, branchId?: string | null) =>
+      permissions.has(permission) || (!!branchId && !!branchPermissions.get(branchId)?.has(permission));
+    const canSomewhere = (permission: Permission) => can(permission) || branchesWith(grants, permission).length > 0;
+    const allowsIn = (permission: Permission, branchId: string | null) => allows(grants, permission, branchId);
+    const canOn = (permission: Permission, target: Pick<User, 'roles' | 'branchId'>) =>
+      allowsIn(permission, target.branchId ?? null) && canManageUser(grants, target, roles, now);
+    const isSelf = (target: Pick<User, 'id'> | null | undefined) => !!target && target.id === userId;
+    const twoFactorSetupRequired = signedIn && setupRequired;
+    return {
+      user, userId, signedIn, roles: userRoles, role: userRoles[0], permissions, branchPermissions, grants, twoFactorSetupRequired, paused, reauthRequested,
+      can, canSomewhere, allows: allowsIn, canOn,
+      branchesWith: permission => permissions.has(permission)
+        ? branches.map(branch => branch.id)
+        : [...branchPermissions].filter(([, granted]) => granted.has(permission)).map(([branchId]) => branchId),
+      isSelf,
+      canAssign: role => !!role && holdsAll(permissions, role.permissions),
+      canGive: (role, branchId, permission = 'users.edit') => !!role && allowsIn(permission, branchId) && canGiveRole(grants, role, branchId),
+      canManage: target => isSelf(target) || (['users.edit', 'users.create', 'users.delete'] as const).some(permission => canOn(permission, target)),
+      canEditProfile: target => isSelf(target) || canOn('users.edit', target),
+      homeUrl() {
+        if (!signedIn) {
+          return signInPath();
+        }
+        if (twoFactorSetupRequired) {
+          return TWO_FACTOR_SETUP_PATH;
+        }
+        if (canSomewhere('users.view')) {
+          return '/overview';
+        }
+        if (canSomewhere('activity.view')) {
+          return '/activity';
+        }
+        if (can('roles.view')) {
+          return '/roles';
+        }
+        if (can('settings.view')) {
+          return '/settings';
+        }
+        return `/users/${userId}`;
+      },
+    };
+  },
+);
+
+/**
+ * The signed-in session: who it is, signing in and out, and the rules that follow it (an ended session, two-step
+ * sign-in to set up, the language of emails, the accessible view holding changes, signing out when idle).
+ * Components read it with useSession(); anything else with session.view.
+ */
+export class Session {
+  readonly store = createStore<SessionState>(() => ({ account: null, paused: null }));
+
+  /** "Keep me signed in" at the last sign-in, for signing in again the same way */
+  private remember = false;
+  /** When the signed-in user last used the app in this tab, and when that was last shared with other tabs */
+  private lastActive = Date.now();
+  private lastShared = 0;
+  private navigate: SessionNavigate = async () => undefined;
+  private currentPath: () => string = () => location.pathname;
+
+  /** Who is signed in and what they may do, now */
+  get view(): SessionView {
+    return buildView([this.store.getState(), adminStore.state]);
+  }
+
+  private patch(partial: Partial<SessionState>) {
+    this.store.setState(partial);
+  }
+
+  /** Picks up a session from before a reload. Runs before the first screen. */
+  async restore(): Promise<void> {
+    try {
+      const user = await adminApi().getSession();
+      if (user) {
+        this.patch({ account: user });
+        await adminStore.load();
+        // Kept signed in, but away for longer than the idle timeout allows: start signed out
+        const minutes = adminStore.state.settings.sessionTimeoutMinutes;
+        const last = readNumber(LAST_ACTIVE_KEY);
+        if (minutes && last && Date.now() - last >= minutes * 60_000) {
+          await adminApi().signOut().catch(() => undefined);
+          this.end();
+        }
+      }
+    } catch {
+      // The server could not be reached or the session is no longer valid: start signed out
+      this.end();
+    }
+  }
+
+  /** With two-step sign-in on, the first try fails with two_factor_required; try again with the code */
+  async signIn(email: string, password: string, remember: boolean, code?: string): Promise<User> {
+    const user = await adminApi().signIn(email, password, remember, code);
+    this.remember = remember;
+    this.patch({ account: user });
+    await adminStore.load();
+    return user;
+  }
+
+  /**
+   * Signs the same person in again after the session ended in the accessible view. The page and what was typed on it
+   * stay; the data is not loaded again until they ask (AdminStore.showChanges), so nothing on it changes by itself.
+   */
+  async resume(password: string, code?: string): Promise<void> {
+    const email = this.view.user?.email;
+    if (!email || !this.store.getState().paused) {
+      return;
+    }
+    const user = await adminApi().signIn(email, password, this.remember, code);
+    this.patch({ account: user, paused: null });
+    adminStore.resume();
+  }
+
+  /** Confirms who the signed-in user is; the changes waiting for it go again. The refusals are those of signing in. */
+  async reauthenticate(password: string, code?: string): Promise<void> {
+    await adminApi().reauthenticate(password, code);
+    adminStore.endReauth(true);
+  }
+
+  /** Leaves the changes waiting for the password unsent: they fail with reauth_required */
+  cancelReauth(): void {
+    adminStore.endReauth(false);
+  }
+
+  /** Leaves the page the session ended on for the sign-in page, as the usual view does at once */
+  leave(): void {
+    const reason = this.store.getState().paused ?? 'ended';
+    this.patch({ paused: null });
+    this.end();
+    void this.navigate(signInPath(), { queryParams: { expired: reason } });
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+    await adminApi().changePassword(currentPassword, newPassword);
+    // The activity log gains an entry; the password has changed even if this refresh fails
+    if (this.view.canSomewhere('activity.view')) {
+      adminApi().listActivity().then(entries => adminStore.setActivity(entries), () => undefined);
+    }
+  }
+
+  /**
+   * Leaves for the sign-in page, then ends the session. A page with unsaved changes asks first; if the person
+   * stays, they stay signed in. Resolves to whether they signed out.
+   */
+  async signOut(): Promise<boolean> {
+    signingOut = true;
+    try {
+      await this.navigate(signInPath(), { state: { [SIGNING_OUT]: true } });
+    } finally {
+      signingOut = false;
+    }
+    if (this.currentPath() !== signInPath()) {
+      return false;
+    }
+    try {
+      await adminApi().signOut();
+    } finally {
+      this.end();
+    }
+    return true;
+  }
+
+  private end() {
+    this.patch({ account: null });
+    adminStore.clear();
+  }
+
+  private markActive() {
+    this.lastActive = Date.now();
+    // Shared at most every few seconds, not on every key press
+    if (this.lastActive - this.lastShared > 5_000) {
+      this.lastShared = this.lastActive;
+      writeNumber(LAST_ACTIVE_KEY, this.lastActive);
+    }
+  }
+
+  private lastActiveAnywhere(): number {
+    return Math.max(this.lastActive, readNumber(LAST_ACTIVE_KEY) ?? 0);
+  }
+
+  // A session that ends (idle, signed out elsewhere, suspended) starts over at the first page after signing in
+  // again, as a first sign-in does; only a link opened while signed out leads back to that page. In the accessible
+  // view it waits on the same page instead (paused)
+
+  private async signOutIdle() {
+    try {
+      await adminApi().signOut();
+    } catch {
+      // Already signed out on the server
+    }
+    if (useUiAccessibleView.getState().on) {
+      this.patch({ paused: 'idle' });
+      return;
+    }
+    this.end();
+    void this.navigate(signInPath(), { queryParams: { expired: 'idle' satisfies SessionEndReason } });
+  }
+
+  private expire(reason: SessionEndReason) {
+    if (useUiAccessibleView.getState().on) {
+      this.patch({ paused: reason });
+      return;
+    }
+    this.end();
+    void this.navigate(signInPath(), { queryParams: { expired: reason } });
+  }
+
+  /**
+   * Starts the rules that follow the session, once the router is there to move between pages (the Angular Session's
+   * effects). `currentPath` tells where the router is, for signOut() to know whether it left.
+   */
+  start(navigate: SessionNavigate, currentPath: () => string): void {
+    this.navigate = navigate;
+    this.currentPath = currentPath;
+
+    // The server said the session ended (signed out elsewhere, or the account was suspended): sign in again
+    watch(() => [adminStore.state.sessionEnded] as const, ([ended]) => {
+      if (ended && this.view.signedIn && !this.store.getState().paused) {
+        this.expire('ended');
+      }
+    });
+
+    // The settings came to require two-step sign-in for this role while the app was open: set it up first. The
+    // accessible view says so instead (SessionNotices), and the next page opened is the setup page.
+    watch(() => [this.view.twoFactorSetupRequired] as const, ([required]) => {
+      if (required && !useUiAccessibleView.getState().on) {
+        void this.navigate(TWO_FACTOR_SETUP_PATH);
+      }
+    });
+
+    // The language someone uses the app in is the language of their emails (API.md, "The language of emails"): kept on
+    // the server once the data has loaded after signing in, and whenever they switch
+    watch(() => [i18next.language, this.view.user, adminStore.state.loaded, this.view.twoFactorSetupRequired, this.store.getState().paused] as const,
+      ([language, user, loaded, setupRequired, paused]) => {
+        if (!user || !language || !(language in EMAIL_LANGUAGES) || user.language === language || !loaded || setupRequired || paused) {
+          return;
+        }
+        adminStore.updateUser(user.id, { language: language as Language }).catch(() => undefined);
+      });
+
+    // The accessible view holds changes made elsewhere until asked for; turned off, any that wait show at once
+    watch(() => [useUiAccessibleView.getState().on] as const, ([hold]) => {
+      adminStore.setHoldChanges(hold);
+      if (!hold && adminStore.state.changesWaiting) {
+        void adminStore.showChanges();
+      }
+    });
+
+    // With a timeout in the settings, sign out after that long without a click, key press or scroll
+    watch(() => [adminStore.state.settings.sessionTimeoutMinutes, this.view.signedIn, this.store.getState().paused, this.view.userId] as const,
+      ([minutes, signedIn, paused, userId]) => {
+        if (!signedIn || paused || !minutes) {
+          return undefined;
+        }
+        this.markActive();
+        // Once per sign-in: how long someone can leave the app before it signs them out (WCAG 2.2.6); the account
+        // menu says so too
+        const notice = `idle-notice:${userId}:${minutes}`;
+        if (!readSession(notice)) {
+          writeSession(notice);
+          uiToast.show(translate('idleNotice', { time: idleTimeoutLabel(translate, minutes) }), 'info', 8000);
+        }
+        /** The warning that signing out is a minute away, taken back once the app is used again */
+        let warning: number | undefined;
+        const touch = () => {
+          this.markActive();
+          if (warning !== undefined) {
+            uiToast.dismiss(warning);
+            warning = undefined;
+          }
+        };
+        ACTIVITY_EVENTS.forEach(type => document.addEventListener(type, touch, { capture: true, passive: true }));
+        let warned = false;
+        const timer = window.setInterval(() => {
+          const idle = Date.now() - this.lastActiveAnywhere();
+          if (idle >= minutes * 60_000) {
+            void this.signOutIdle();
+          } else if (idle >= minutes * 60_000 - IDLE_WARNING_MS) {
+            // A minute's notice, shown once, so someone reading a page can stay signed in
+            if (!warned) {
+              warned = true;
+              warning = uiToast.show(translate('You will be signed out in a minute. Click anywhere to stay signed in.'), 'info', IDLE_WARNING_MS);
+            }
+          } else {
+            warned = false;
+          }
+        }, IDLE_CHECK_MS);
+        return () => {
+          window.clearInterval(timer);
+          if (warning !== undefined) {
+            uiToast.dismiss(warning);
+          }
+          ACTIVITY_EVENTS.forEach(type => document.removeEventListener(type, touch, { capture: true }));
+        };
+      });
+  }
+}
+
+/**
+ * Runs `run` with what `read` picks, at once and again whenever any of it changes (by identity), as an Angular effect
+ * that reads those signals: on any change of the stores, the accessible view or the language. What `run` returns is
+ * called before it runs again.
+ */
+function watch<T extends readonly unknown[]>(read: () => T, run: (values: T) => (() => void) | void): void {
+  let last: T | undefined;
+  let cleanup: (() => void) | void;
+  const check = () => {
+    const values = read();
+    if (last && values.every((value, index) => Object.is(value, last![index]))) {
+      return;
+    }
+    last = values;
+    cleanup?.();
+    cleanup = run(values);
+  };
+  adminStore.store.subscribe(check);
+  session.store.subscribe(check);
+  useUiAccessibleView.subscribe(check);
+  i18next.on('languageChanged', check);
+  check();
+}
+
+/** The one session the app has */
+export const session = new Session();
+
+/** The session, in a component: it renders again when who is signed in, or what they may do, changes */
+export function useSession(): SessionView {
+  const state = useStore(session.store);
+  const admin = useStore(adminStore.store);
+  return useMemo(() => buildView([state, admin]), [state, admin]);
+}
+
+// Storage can be missing or blocked; the idle timer then only knows about this tab
+function readNumber(key: string): number | null {
+  try {
+    return Number(localStorage.getItem(key)) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeNumber(key: string, value: number) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Not shared with other tabs
+  }
+}
+
+function readSession(key: string): boolean {
+  try {
+    return sessionStorage.getItem(key) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeSession(key: string): void {
+  try {
+    sessionStorage.setItem(key, '1');
+  } catch {
+    // Storage unavailable: the notice may show again after a reload
+  }
+}

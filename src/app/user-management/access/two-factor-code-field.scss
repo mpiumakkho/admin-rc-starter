@@ -1,0 +1,15 @@
+/* @host app-two-factor-code-field */
+:host { display: flex; flex-direction: column; gap: .375rem; }
+.code-input { max-width: 12rem; font-family: var(--ui-font-mono); font-size: 1rem; letter-spacing: .12em; }
+.code-switch {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ui-primary-text);
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.code-switch:hover { text-decoration: underline; }

@@ -1,0 +1,150 @@
+/* @host app-access-review */
+:host {
+  display: flex;
+  flex-direction: column;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1.5rem;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.toolbar-search {
+  flex: 0 1 300px;
+}
+
+.toolbar-chips {
+  min-width: 0;
+  margin-inline-start: auto;
+}
+
+.table-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .625rem 1.5rem;
+  border-top: 1px solid var(--ui-border);
+  color: var(--ui-muted);
+  font-size: .8125rem;
+}
+
+.loading {
+  margin: 0;
+  padding: 2rem 1.5rem;
+  color: var(--ui-muted);
+}
+
+.person-link {
+  display: inline-flex;
+  color: inherit;
+  text-decoration: none;
+}
+
+.muted {
+  color: var(--ui-muted);
+  white-space: nowrap;
+}
+
+.decision-buttons {
+  display: inline-flex;
+  gap: .375rem;
+}
+
+.decided-by {
+  white-space: nowrap;
+}
+
+// The reason given, on one line under who decided; the whole of it as a tooltip
+.decision-note {
+  display: block;
+  max-width: 14rem;
+  overflow: hidden;
+  color: var(--ui-muted);
+  font-size: .75rem;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// Less important columns give way on smaller screens; the Keep and Remove buttons take room
+@media (max-width: 1499px) {
+  .hide-xl {
+    display: none;
+  }
+}
+
+@media (max-width: 1199px) {
+  .hide-lg {
+    display: none;
+  }
+}
+
+@media (max-width: 991px) {
+  .hide-md {
+    display: none;
+  }
+}
+
+// Phones: each role is a card, the person on top, then the role and the decision, so Keep and Remove stay in view
+@media (max-width: 575px) {
+  .toolbar {
+    padding: .75rem 1rem;
+  }
+
+  .toolbar-search {
+    flex: 1 1 100%;
+  }
+
+  .toolbar-chips {
+    flex: 1 1 100%;
+    margin-inline-start: 0;
+  }
+
+  .review-table thead {
+    display: none;
+  }
+
+  .review-table tbody tr {
+    display: grid;
+    grid-template-areas:
+      "check person"
+      "check role"
+      "check decision";
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: .5rem .75rem;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--ui-border);
+
+    &:last-child {
+      border-bottom: 0;
+    }
+  }
+
+  .review-table tbody td {
+    display: block;
+    width: auto;
+    padding: 0;
+    border: 0;
+
+    &.hide-md,
+    &.hide-lg,
+    &.hide-xl {
+      display: none;
+    }
+  }
+
+  .cell-check { grid-area: check; }
+  .cell-person { grid-area: person; min-width: 0; }
+  .cell-role { grid-area: role; }
+  .cell-decision { grid-area: decision; }
+
+  .table-footer {
+    padding-inline: 1rem;
+  }
+}

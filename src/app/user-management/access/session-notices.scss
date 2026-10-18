@@ -1,0 +1,10 @@
+/* @host app-session-notices */
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
+:host(.has-notices) {
+  margin-bottom: 1rem;
+}
