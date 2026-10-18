@@ -99,7 +99,7 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 | `GET /users/:id/sessions` | | `UserSession[]` ใช้ล่าสุดก่อน session ของ request นี้มี `current: true` |
 | `DELETE /sessions/:id` | `{ reason? }` สำหรับของคนอื่น (ดูเหตุผล) | ไม่มี |
 | `POST /users/:id/sessions/end` | `{ reason? }` สำหรับคนอื่น (ดูเหตุผล) | ไม่มี จบทุก session ของผู้ใช้ ถ้าเป็นของตัวเอง จบทั้งหมดยกเว้นอันปัจจุบัน |
-| `POST /me/two-factor` | | `TwoFactorSetup`: `secret` แบบ base32 ชุดใหม่และ `uri` แบบ `otpauth://` เก็บรอไว้จนกว่าจะยืนยัน |
+| `POST /me/two-factor` | | `TwoFactorSetup`: `secret` แบบ base32 ชุดใหม่และ `uri` แบบ `otpauth://` เก็บรอไว้จนกว่าจะยืนยัน ตอบ `invalid_request` ระหว่างที่เปิด 2 ขั้นตอนอยู่ จะเปลี่ยนแอป authenticator ต้องปิดก่อนด้วยรหัส แล้วจึงเปิดใหม่ |
 | `POST /me/two-factor/confirm` | `{ code }` | `TwoFactorConfirmation`: `{ user, recoveryCodes }` คือ `User` ที่ `twoFactor: true` และรหัสกู้คืนชุดแรก `invalid_code` ถ้ารหัสไม่ตรงกับ secret ที่รอไว้ |
 | `POST /me/two-factor/disable` | `{ code }` | `User` ที่ `twoFactor: false` `invalid_code` ถ้ารหัสผิด |
 | `POST /users/:id/two-factor/reset` | `{ reason? }` (ดูเหตุผล) | `User` ที่ `twoFactor: false` ต้องมี `users.edit` ทำกับตัวเองเป็น `self_change` |
@@ -114,7 +114,7 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 
 ### บทบาทที่ต้องใช้การยืนยันตัวตน 2 ขั้นตอน
 
-การตั้งค่าบังคับใช้กับบางบทบาทได้ (`twoFactorRoleIds`) คนที่ถือบทบาทเหล่านั้นอยู่ตอนนี้ (ดูการมอบบทบาท) และยังไม่เปิดยังเข้าสู่ระบบได้ แต่จนกว่าจะเปิด เซิร์ฟเวอร์ตอบทุก request ด้วย `403` `two_factor_mandatory` รวม `GET /events` ยกเว้นที่ต้องใช้เพื่อเปิด: `GET /me`, `GET /settings`, `GET /roles`, `POST /me/two-factor` และ `POST /me/two-factor/confirm` (และ `/auth/*` ซึ่งไม่ต้องใช้ access token) มีผลทันทีตั้งแต่ request ถัดไป: ผู้ดูแลที่เพิ่มบทบาทของตัวเองเข้ารายการระหว่างที่ตัวเองปิด 2 ขั้นตอนอยู่ก็ถูกกันไว้ด้วย `POST /me/two-factor/disable` ถูกปฏิเสธด้วย `two_factor_mandatory` ระหว่างที่บทบาทบังคับอยู่ ผู้ดูแลยังปิดให้ได้ด้วย `POST /users/:id/two-factor/reset` แล้วคนนั้นต้องเปิดใหม่ก่อนทำอย่างอื่น
+การตั้งค่าบังคับใช้กับบางบทบาทได้ (`twoFactorRoleIds`) คนที่ถือบทบาทเหล่านั้นอยู่ตอนนี้ (ดูการมอบบทบาท) และยังไม่เปิดยังเข้าสู่ระบบได้ แต่จนกว่าจะเปิด เซิร์ฟเวอร์ตอบทุก request ด้วย `403` `two_factor_mandatory` รวม `GET /events` ยกเว้นที่ต้องใช้เพื่อเปิด: `GET /me`, `GET /settings`, `GET /roles`, `POST /me/reauthenticate` (การเปิดอาจถามรหัสผ่านอีกครั้ง), `POST /me/two-factor` และ `POST /me/two-factor/confirm` (และ `/auth/*` ซึ่งไม่ต้องใช้ access token) มีผลทันทีตั้งแต่ request ถัดไป: ผู้ดูแลที่เพิ่มบทบาทของตัวเองเข้ารายการระหว่างที่ตัวเองปิด 2 ขั้นตอนอยู่ก็ถูกกันไว้ด้วย `POST /me/two-factor/disable` ถูกปฏิเสธด้วย `two_factor_mandatory` ระหว่างที่บทบาทบังคับอยู่ ผู้ดูแลยังปิดให้ได้ด้วย `POST /users/:id/two-factor/reset` แล้วคนนั้นต้องเปิดใหม่ก่อนทำอย่างอื่น
 
 แอปตรวจสิ่งเดียวกันหลังเข้าสู่ระบบ และทุกครั้งที่ request ตอบ `two_factor_mandatory` แล้วพาคนนั้นไปที่ `/setup-two-factor` จนกว่าจะเปิด หน้าการตั้งค่าเตือนผู้ดูแลที่กำลังจะเพิ่มบทบาทของตัวเองเข้ารายการ
 
@@ -128,6 +128,7 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 | สิ่งที่บทบาทอนุญาต | `PATCH /roles/:id` เมื่อ `permissions` เปลี่ยน, `DELETE /roles/:id` |
 | ลบคน | `POST /users/delete` |
 | การเข้าสู่ระบบของคนอื่น | `POST /users/:id/reset-password`, `POST /users/:id/two-factor/reset`, และ `DELETE /sessions/:id` กับ `POST /users/:id/sessions/end` ที่ทำกับคนอื่น |
+| สิ่งที่ใช้กู้บัญชี | `PATCH /users/:id` เมื่อ `email` เปลี่ยน เพราะลิงก์รีเซ็ตรหัสผ่านถูกส่งไปที่นั่น และ `POST /me/two-factor` ซึ่งผูกบัญชีกับแอป authenticator |
 | รหัสกู้คืนของตัวเอง | `POST /me/recovery-codes` |
 | ปิดรอบทบทวนสิทธิ์ ซึ่งถอดบทบาทที่ตัดสินว่า `remove` | `POST /access-reviews/:id/close` |
 | การตั้งค่า | `PATCH /settings` |
