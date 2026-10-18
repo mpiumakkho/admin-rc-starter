@@ -1,0 +1,65 @@
+.ui-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--ui-heading);
+  }
+
+  &:focus-visible {
+    border-radius: 4px;
+    outline: none;
+    box-shadow: var(--ui-ring);
+  }
+
+  ng-icon {
+    font-size: .875rem;
+  }
+}
+
+.ui-sort-idle {
+  opacity: .45;
+}
+
+.ui-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .5rem;
+  padding: .625rem 1.5rem;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-primary-soft);
+  font-family: var(--ui-font);
+  animation: ui-bulk-in .2s var(--ui-ease);
+}
+
+.ui-bulk-label {
+  margin-inline-end: .5rem;
+  color: var(--ui-heading);
+  font-size: .8125rem;
+  font-weight: 600;
+}
+
+.ui-bulk-clear {
+  margin-inline-start: auto;
+}
+
+@keyframes ui-bulk-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.ui-menu.ui-page-size-menu {
+  min-width: 9rem;
+}

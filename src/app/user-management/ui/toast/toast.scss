@@ -1,0 +1,117 @@
+.ui-toaster {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .5rem;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.ui-toast {
+  display: inline-flex;
+  align-items: center;
+  gap: .625rem;
+  max-width: min(480px, calc(var(--ui-100vw) - 2rem));
+  padding: .625rem .5rem .625rem 1rem;
+  border-radius: 999px;
+  background: #0f172a;
+  box-shadow: var(--ui-shadow-lg);
+  color: #f8fafc;
+  font: 500 .8125rem/1.4 var(--ui-font);
+  pointer-events: auto;
+  animation: ui-toast-in .25s var(--ui-ease);
+}
+
+// Going, it fades and sinks back a little, quicker than it came
+.ui-toast-leave {
+  animation: ui-toast-out var(--ui-duration-fast) var(--ui-ease-in) forwards;
+}
+
+.ui-toast-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.ui-toast-success .ui-toast-icon { color: #34d399; }
+.ui-toast-error .ui-toast-icon { color: #f87171; }
+.ui-toast-info .ui-toast-icon { color: #38bdf8; }
+
+.ui-toast-close {
+  display: inline-flex;
+  padding: .25rem;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #94a3b8;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, .1);
+    color: #ffffff;
+  }
+}
+
+.theme-dark .ui-toast,
+[data-theme="dark"] .ui-toast {
+  background: #334155;
+}
+
+// In the page, above its content: a full-width stack that pushes the page down instead of covering it, drawn
+// like the page's own messages (ui-alert)
+.ui-toaster-inline {
+  position: static;
+  align-items: stretch;
+  transform: none;
+
+  &:not(:empty) {
+    margin-bottom: 1rem;
+  }
+
+  .ui-toast {
+    max-width: none;
+    padding: 0 0 0 .875rem;
+    border: 1px solid var(--ui-border-strong);
+    border-radius: var(--ui-radius);
+    background: var(--ui-surface);
+    box-shadow: none;
+    color: var(--ui-text);
+    animation: none;
+  }
+
+  .ui-toast-message {
+    flex: 1;
+  }
+
+  .ui-toast-success .ui-toast-icon { color: var(--ui-success-text); }
+  .ui-toast-error .ui-toast-icon { color: var(--ui-danger-text); }
+  .ui-toast-info .ui-toast-icon { color: var(--ui-info-text); }
+
+  .ui-toast-close {
+    justify-content: center;
+    align-items: center;
+    color: var(--ui-muted);
+
+    &:hover {
+      background: var(--ui-hover);
+      color: var(--ui-heading);
+    }
+  }
+}
+
+@keyframes ui-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes ui-toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(.98);
+  }
+}

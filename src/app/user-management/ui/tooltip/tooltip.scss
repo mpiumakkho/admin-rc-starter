@@ -1,0 +1,55 @@
+.ui-tooltip {
+  position: relative;
+  display: inline-flex;
+}
+
+.ui-tooltip-panel {
+  position: absolute;
+  top: calc(100% + .375rem);
+  inset-inline-start: 0;
+  z-index: 1070;
+  display: flex;
+  flex-direction: column;
+  gap: .125rem;
+  padding: .4375rem .75rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-lg);
+  font: 400 .8125rem/1.4 var(--ui-font);
+  text-align: start;
+  white-space: nowrap;
+
+  // Over the gap to the control, so the pointer can move onto the tooltip without it going
+  &::before {
+    content: '';
+    position: absolute;
+    inset: auto 0 100%;
+    height: .5rem;
+  }
+}
+
+.ui-tooltip-end {
+  inset-inline: auto 0;
+}
+
+.ui-tooltip-text {
+  color: var(--ui-heading);
+  font-weight: 600;
+}
+
+.ui-tooltip-detail {
+  color: var(--ui-muted);
+  font-size: .75rem;
+}
+
+.ui-tooltip-in {
+  animation: ui-tooltip-in .16s var(--ui-ease);
+}
+
+@keyframes ui-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

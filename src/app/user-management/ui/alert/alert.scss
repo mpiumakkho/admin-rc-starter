@@ -1,0 +1,42 @@
+.ui-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: .625rem;
+  padding: .625rem .875rem;
+  border: 1px solid color-mix(in srgb, var(--ui-alert-fg) 22%, transparent);
+  border-radius: var(--ui-radius);
+  background: var(--ui-alert-bg);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: .8125rem;
+  line-height: 1.5;
+}
+
+.ui-alert-icon {
+  flex-shrink: 0;
+  margin-top: .125rem;
+  color: var(--ui-alert-fg);
+  font-size: 1rem;
+}
+
+.ui-alert-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.ui-alert-title {
+  margin: 0 0 .125rem;
+  color: var(--ui-heading);
+  font-weight: 600;
+}
+
+.ui-alert-text > :last-child {
+  margin-bottom: 0;
+}
+
+.ui-alert-primary { --ui-alert-bg: var(--ui-primary-soft); --ui-alert-fg: var(--ui-primary-text); }
+.ui-alert-success { --ui-alert-bg: var(--ui-success-soft); --ui-alert-fg: var(--ui-success-text); }
+.ui-alert-warning { --ui-alert-bg: var(--ui-warning-soft); --ui-alert-fg: var(--ui-warning-text); }
+.ui-alert-danger { --ui-alert-bg: var(--ui-danger-soft); --ui-alert-fg: var(--ui-danger-text); }
+.ui-alert-info { --ui-alert-bg: var(--ui-info-soft); --ui-alert-fg: var(--ui-info-text); }
+.ui-alert-neutral { --ui-alert-bg: var(--ui-neutral-soft); --ui-alert-fg: var(--ui-neutral-text); }

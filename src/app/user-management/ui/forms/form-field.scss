@@ -1,0 +1,45 @@
+.ui-form-field {
+  display: block;
+  font-family: var(--ui-font);
+}
+
+.ui-field-label-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: .5rem;
+  margin-bottom: .375rem;
+}
+
+.ui-field-label {
+  margin: 0;
+  color: var(--ui-text);
+  font-size: .8125rem;
+  font-weight: 500;
+}
+
+.ui-field-required {
+  margin-inline-start: .125rem;
+  color: var(--ui-danger);
+}
+
+.ui-field-optional {
+  margin-inline-start: .25rem;
+  color: var(--ui-subtle);
+  font-weight: 400;
+}
+
+.ui-field-hint,
+.ui-field-error {
+  margin: .375rem 0 0;
+  font-size: .75rem;
+  line-height: 1.4;
+}
+
+.ui-field-hint {
+  color: var(--ui-muted);
+}
+
+.ui-field-error {
+  color: var(--ui-danger-text);
+}

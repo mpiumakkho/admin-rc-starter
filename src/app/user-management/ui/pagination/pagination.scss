@@ -1,0 +1,70 @@
+// Wraps onto a second line rather than run off the narrowest screens
+.ui-pagination {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .25rem;
+  font-family: var(--ui-font);
+}
+
+.ui-page {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
+  padding: 0 .625rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  font: 500 .8125rem/1 var(--ui-font);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+
+  &:hover:not(:disabled):not(.ui-page-active) {
+    background: var(--ui-hover);
+    color: var(--ui-heading);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--ui-ring);
+  }
+
+  &:disabled {
+    color: var(--ui-subtle);
+    cursor: not-allowed;
+  }
+
+  ng-icon {
+    font-size: 1rem;
+  }
+
+  .rtl & ng-icon,
+  [dir="rtl"] & ng-icon {
+    transform: scaleX(-1);
+  }
+}
+
+.ui-page-active {
+  border-color: var(--ui-primary);
+  background: var(--ui-primary);
+  color: var(--ui-on-primary);
+  cursor: default;
+}
+
+// Nine buttons fit across most phones; each stays above the 24px a finger needs (WCAG 2.5.8)
+@media (max-width: 479px) {
+  .ui-pagination {
+    gap: .125rem;
+  }
+
+  .ui-page {
+    min-width: 30px;
+    height: 32px;
+    padding: 0 .375rem;
+  }
+}

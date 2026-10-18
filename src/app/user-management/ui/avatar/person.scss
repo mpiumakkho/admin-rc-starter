@@ -1,0 +1,36 @@
+.ui-person {
+  display: inline-flex;
+  align-items: center;
+  gap: .75rem;
+  min-width: 0;
+  font-family: var(--ui-font);
+  // A photo's baseline is its bottom edge, so baseline alignment would make photo rows taller than initials rows
+  vertical-align: middle;
+}
+
+.ui-person-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.ui-person-name {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  overflow: hidden;
+  color: var(--ui-heading);
+  font-size: .875rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ui-person-detail {
+  overflow: hidden;
+  color: var(--ui-muted);
+  font-size: .75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

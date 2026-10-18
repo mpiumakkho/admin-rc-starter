@@ -1,0 +1,22 @@
+// ng-icon's own styles, as @ng-icons/core gives them to its component in the Angular app, at the same specificity:
+// one em square, the SVG filling it, in the text color
+:where(ng-icon)[role] {
+  display: inline-block;
+  width: var(--ng-icon__size, 1em);
+  height: var(--ng-icon__size, 1em);
+  line-height: initial;
+  vertical-align: initial;
+  overflow: hidden;
+}
+
+:where(ng-icon)[role] svg {
+  width: inherit;
+  height: inherit;
+  vertical-align: inherit;
+}
+
+@layer ng-icon {
+  :where(ng-icon)[role] {
+    color: var(--ng-icon__color, currentColor);
+  }
+}

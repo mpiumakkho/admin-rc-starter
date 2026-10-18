@@ -1,0 +1,18 @@
+.ui-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: .25rem;
+  padding: .125rem .5rem;
+  border-radius: 999px;
+  font: 600 .75rem/1.4 var(--ui-font);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+
+  ng-icon {
+    font-size: .875rem;
+  }
+}
+
+.ui-trend-good { background: var(--ui-success-soft); color: var(--ui-success-text); }
+.ui-trend-bad { background: var(--ui-danger-soft); color: var(--ui-danger-text); }
+.ui-trend-flat { background: var(--ui-neutral-soft); color: var(--ui-neutral-text); }

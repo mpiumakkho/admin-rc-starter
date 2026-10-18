@@ -1,0 +1,168 @@
+.ui-segmented {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  font-family: var(--ui-font);
+}
+
+.ui-seg-option {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: .375rem;
+  border: 0;
+  background: transparent;
+  color: var(--ui-muted);
+  font: 600 .8125rem/1 var(--ui-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, box-shadow .15s ease, border-color .15s ease;
+
+  &:hover:not(:disabled) {
+    color: var(--ui-heading);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: var(--ui-ring);
+  }
+
+  &:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+
+  ng-icon {
+    font-size: 1rem;
+  }
+}
+
+.ui-seg-count {
+  min-width: 1.25rem;
+  padding: .125rem .375rem;
+  border-radius: 999px;
+  background: var(--ui-hover);
+  color: var(--ui-muted);
+  font-size: .6875rem;
+  text-align: center;
+}
+
+/* The mark under the chosen option: placed by script (UiSegmented.place), shown once placed; it slides only after
+   the first placing, so it does not fly in from the left when the page opens */
+.ui-seg-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ui-seg-sliding > .ui-seg-indicator {
+  opacity: 1;
+}
+
+.ui-seg-ready > .ui-seg-indicator {
+  transition: transform var(--ui-duration) var(--ui-ease-standard), width var(--ui-duration) var(--ui-ease-standard),
+    opacity var(--ui-duration-fast) ease;
+}
+
+@media (forced-colors: active) {
+  .ui-seg-indicator {
+    display: none;
+  }
+}
+
+/* Pill: buttons inside a tinted track */
+.ui-segmented-pill {
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--ui-radius);
+  background: var(--ui-hover);
+
+  .ui-seg-option {
+    height: 30px;
+    padding: 0 .75rem;
+    border-radius: .375rem;
+  }
+
+  .ui-seg-active {
+    background: var(--ui-surface);
+    box-shadow: var(--ui-shadow-sm);
+    color: var(--ui-heading);
+  }
+
+  .ui-seg-indicator {
+    top: 3px;
+    bottom: 3px;
+    border-radius: .375rem;
+    background: var(--ui-surface);
+    box-shadow: var(--ui-shadow-sm);
+  }
+
+  // The mark is the chosen option's background now; its focus ring stays its own
+  @media (forced-colors: none) {
+    &.ui-seg-sliding .ui-seg-active {
+      background: transparent;
+
+      &:not(:focus-visible) {
+        box-shadow: none;
+      }
+    }
+  }
+
+  &.ui-segmented-sm .ui-seg-option {
+    height: 26px;
+    padding: 0 .625rem;
+    font-size: .75rem;
+  }
+}
+
+/*
+ * Underline: tabs along a rule. The row scrolls sideways when the tabs do not fit, which clips anything outside
+ * it, so everything stays inside: the rule is a shadow under the tabs, which the chosen tab's line covers, and the
+ * focus ring is drawn just inside each tab. Nothing reaches below the row, so it never scrolls up and down.
+ */
+.ui-segmented-underline {
+  gap: .5rem;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-shadow: inset 0 -1px 0 var(--ui-border);
+
+  .ui-seg-option {
+    height: 40px;
+    padding: 0 .5rem;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+
+    &:focus-visible {
+      outline-offset: -2px;
+      box-shadow: none;
+    }
+  }
+
+  .ui-seg-active {
+    border-bottom-color: var(--ui-primary);
+    color: var(--ui-heading);
+
+    .ui-seg-count {
+      background: var(--ui-primary-soft);
+      color: var(--ui-primary-text);
+    }
+  }
+
+  .ui-seg-indicator {
+    top: auto;
+    bottom: 0;
+    height: 2px;
+    background: var(--ui-primary);
+  }
+
+  // The mark is the chosen tab's line now
+  @media (forced-colors: none) {
+    &.ui-seg-sliding .ui-seg-active {
+      border-bottom-color: transparent;
+    }
+  }
+}
