@@ -14,6 +14,8 @@ import './import-users-dialog.scss';
 
 /** The most rows one import takes */
 const MAX_ROWS = 500;
+/** The largest file read: 500 rows take a fraction of it, and the server takes no more than 5 MB */
+const MAX_FILE_BYTES = 1024 * 1024;
 
 export interface ImportUsersDialogProps {
   open: boolean;
@@ -65,6 +67,10 @@ export function ImportUsersDialog({ open, onOpenChange }: ImportUsersDialogProps
   const roleNames = (grants: RoleGrant[]) => grants.map(grant => store.rolesById.get(grant.roleId)?.name).filter(Boolean).join(', ') || '—';
 
   const pick = async (file: File) => {
+    if (file.size > MAX_FILE_BYTES) {
+      uiToast.show(t('This file is larger than 1 MB. Split it into smaller files.'), 'error');
+      return;
+    }
     const rows = parseCsv(await file.text());
     setTooMany(rows.length - 1 > MAX_ROWS);
     setFileName(file.name);

@@ -166,6 +166,8 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 
 `language` เป็น `th`, `en` หรือ `null` สำหรับ `defaultLanguage` ของการตั้งค่า: ภาษาของอีเมลถึงคนนั้น (ดูภาษาของอีเมล) ค่าอื่นเป็น `invalid_request` การเปลี่ยน `language` อย่างเดียวไม่เขียน `user.updated` เพราะเป็นค่าที่ชอบส่วนตัว เหมือนธีม และ `PATCH` ที่ไม่ได้เปลี่ยนอะไรที่ประวัติเก็บก็ไม่เขียนเช่นกัน
 
+`firstName`, `lastName` และ `department` ยาว 1 ถึง 100 ตัวอักษร และไม่ใช่ช่องว่างล้วน: `PATCH` ละไว้ได้ แต่ทำให้ว่างไม่ได้ `avatar` เป็น `""` เมื่อไม่มีรูป หรือรูป JPEG, PNG หรือ WebP ใน `data:` URL แบบ base64 ยาวไม่เกิน 100,000 ตัวอักษร ที่ byte เป็นรูปชนิดนั้นจริง ห้ามเป็นลิงก์ ซึ่งเบราว์เซอร์ของทุกคนที่เห็นคนนั้นจะไปโหลดจากที่ที่ลิงก์ชี้ และห้ามเป็น SVG ซึ่งมี script ได้ แอปส่ง JPEG ขนาด 160 pixel และส่ง `avatar` ใน `PATCH` เฉพาะเมื่อเปลี่ยน นอกจากนี้เป็น `invalid_request`
+
 เซิร์ฟเวอร์กำหนด `id`, `createdAt` และ `lastActiveAt` เอง ผู้ใช้ใหม่สถานะ `invited` ได้อีเมลคำเชิญ อีเมลที่คนอื่นใช้อยู่ให้ปฏิเสธด้วย `email_taken` เมื่อการตั้งค่ามีรายการโดเมนที่อนุญาต อีเมลใหม่หรือที่เปลี่ยนนอกโดเมนเหล่านั้นให้ปฏิเสธด้วย `email_domain`
 
 ## การมอบบทบาท
@@ -329,7 +331,7 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 | `401` | `unauthenticated` (ไม่มี access token หรือหมดอายุ หรือ session ของมันจบแล้ว), `invalid_credentials`, `two_factor_required`, `invalid_code` |
 | `403` | `forbidden`, `self_change`, `account_suspended`, `invite_pending`, `two_factor_mandatory`: บทบาทบังคับ 2 ขั้นตอนแต่ยังปิดอยู่; `reauth_required`: การเปลี่ยนแปลงต้องยืนยันรหัสผ่านอีกครั้ง |
 | `404` | `not_found` |
-| `400` | `invalid_request`: ฟิลด์ที่ request ตั้งไม่ได้ หรือค่าผิดชนิด; `invalid_token`: ลิงก์ในอีเมลที่หมดอายุหรือถูกใช้แล้ว |
+| `400` | `invalid_request`: ฟิลด์ที่ request ตั้งไม่ได้ ค่าผิดชนิด หรือ body ใหญ่เกิน 1 MB (5 MB สำหรับ `POST /users/import`) ซึ่งถูกปฏิเสธก่อนอ่าน; `invalid_token`: ลิงก์ในอีเมลที่หมดอายุหรือถูกใช้แล้ว |
 | `409` | `email_taken`, `role_in_use`, `system_role`, `not_invited`, `default_role`, `already_assigned`, `last_administrator`, `code_taken`, `branch_in_use`, `branch_closed`, `role_conflict`, `review_closed` |
 | `422` | `email_domain`, `weak_password`, `password_reused`, `assignment_too_long`, `reason_required` |
 | `429` | `too_many_requests`: ความพยายามเข้าสู่ระบบ refresh หรือรีเซ็ตจาก address เดียวมากเกินไป หรือการตรวจรหัสผ่านหรือรหัส (`POST /me/reauthenticate`, `POST /me/password`, `POST /me/two-factor/disable`) มากเกินไป |

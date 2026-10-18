@@ -182,11 +182,14 @@ export function UserFormComponent() {
 
   const save = form.handleSubmit(async () => {
     // Every field, the ones that cannot be changed here too, as Angular's getRawValue
-    const { branchId, language, ...rest } = form.getValues();
+    const { branchId, language, avatar, ...rest } = form.getValues();
     const profile = { ...rest, branchId: branchId || null, language: language || null };
     setSaving(true);
     try {
-      const result = id ? await adminStore.updateUser(id, profile) : await adminStore.createUser({ ...profile, roles: grants });
+      // The photo goes only when it changed: one kept from before stays as it is
+      const result = id
+        ? await adminStore.updateUser(id, avatar === user?.avatar ? profile : { ...profile, avatar })
+        : await adminStore.createUser({ ...profile, avatar, roles: grants });
       saved.current = true;
       uiToast.show(t(id ? 'toast.userUpdated' : 'toast.userCreated', { name: fullName(result) }));
       void navigate(`/users/${result.id}`);
