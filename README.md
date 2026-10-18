@@ -106,6 +106,15 @@ configureUserManagement({ api: new HttpAdminApi({ url: '/api', events: true }) }
 configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 ```
 
+## นำขึ้นใช้งานจริง
+
+`npm run build` วางแอปไว้ใน `dist/` ไฟล์ [deploy/nginx.conf](deploy/nginx.conf) ใช้ nginx เสิร์ฟ ส่ง path อื่นทั้งหมดไปที่ `index.html` ส่งต่อ `/api` ไปที่ API (ชื่อเครื่อง `api` พอร์ต 8080) และเพิ่ม header ป้องกันที่เบราว์เซอร์ต้องได้จากหน้าเว็บ (OWASP ASVS V3.4):
+
+- `Content-Security-Policy`: script และทรัพยากรอื่นมาจาก origin ของแอปเท่านั้น `frame-ancestors 'none'` ทำให้เว็บอื่นเอาแอปไปแสดงใน frame ไม่ได้ และไม่มี plugin ส่วน style เป็น inline ได้ เพราะหน้าพิมพ์เขียน `<style>` ของตัวเอง
+- `Referrer-Policy: no-referrer` เพราะลิงก์ในอีเมลมี token อยู่ใน address, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security` และ `X-Frame-Options` สำหรับเบราว์เซอร์รุ่นเก่า
+
+แอปไม่มี inline script นโยบายจึงไม่ต้องมี `'unsafe-inline'` สำหรับ script: ส่วนที่เลือกธีมก่อนแสดงผลครั้งแรกอยู่ใน `public/theme.js` ถ้าใช้ hosting อื่นให้ส่ง header ชุดเดียวกัน และถ้า API อยู่คนละ origin ให้เพิ่มไว้ใน `connect-src`
+
 ## ภาษา
 
 UI มีภาษาไทย (`th` ค่าเริ่มต้น) และอังกฤษ (`en`) ผ่าน i18next ไฟล์แปลเป็นชุดเดียวกับฝั่ง Angular:

@@ -17,7 +17,7 @@ export interface UiThemeState {
  * Light or dark mode for the whole page. Sets `theme-light` or `theme-dark` on <body>, which the
  * --ui-* variables respond to, and remembers the choice in localStorage.
  *
- * To avoid a flash of the wrong theme, set the same class from a small script in index.html
+ * To avoid a flash of the wrong theme, set the same class from public/theme.js, which index.html runs first
  * before the app starts; this store reads it back on startup.
  *
  *   const { isDark, toggle } = useUiTheme();

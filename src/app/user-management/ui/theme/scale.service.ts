@@ -30,7 +30,7 @@ let held: UiScale | null = null;
 
 /**
  * The size of the whole UI, text, icons and spacing alike, as a browser's zoom makes it: 100%, 110% or 125%. Sets
- * --ui-zoom on <html>, which ui.scss zooms the app and the menus over it by, and remembers the choice. index.html sets
+ * --ui-zoom on <html>, which ui.scss zooms the app and the menus over it by, and remembers the choice. public/theme.js sets
  * the same before the app starts, so the page does not first show at 100%.
  *
  * Media queries still see the window's own width: at 125%, a window 1280 pixels wide has the layout made for 1280
@@ -82,7 +82,7 @@ function applyHold(scale: UiScale): void {
   }
 }
 
-/** What index.html set before the app started */
+/** What public/theme.js set before the app started */
 function read(): UiScale {
   const value = Number(document.documentElement.style.getPropertyValue(VARIABLE));
   return UI_SCALES.find(scale => scale === value) ?? 1;

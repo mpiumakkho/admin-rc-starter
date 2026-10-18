@@ -15,7 +15,7 @@ export interface UiAccessibleViewState {
  * goes away by itself (WCAG lets a site meet AAA through such a "conforming alternate version", as long as every page
  * links to it). Sets `ui-aaa` on <body>, which ui.scss and the components respond to, and remembers the choice.
  *
- * index.html sets the same class before the app starts, so the page does not first show the usual look.
+ * public/theme.js sets the same class before the app starts, so the page does not first show the usual look.
  */
 export const useUiAccessibleView = create<UiAccessibleViewState>((set, get) => ({
   on: document.body.classList.contains(CLASS),
