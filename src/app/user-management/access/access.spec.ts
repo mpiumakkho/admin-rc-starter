@@ -1,0 +1,1006 @@
+import type { LoaderFunctionArgs } from 'react-router';
+
+import { adminApi } from '../config';
+import { activeRoleIds, administratorRemains, roleAssignmentState } from '../data/access-rules';
+import { ALL_PERMISSIONS } from '../data/catalog';
+import { AdminApiError } from '../data/admin-api';
+import {
+  adminStore, selectAccessReviewsWaiting, selectBranchesById, selectOpenBranches, selectRoleConflictViolations, selectRolesById, selectUsersById,
+} from '../data/admin-store';
+import { LocalAdminApi } from '../data/local-admin-api';
+import { createMockData, DEMO_ACCOUNTS, type AdminData } from '../data/mock-data';
+import { totp } from '../data/totp';
+import type { UserDraft } from '../data/models';
+import { freshUserManagement } from '../testing';
+import { useUiAccessibleView, useUiToast } from '../ui';
+import { canEditUser, canSeeAccessReviews, canViewUser, requirePermission, signedIn, signedOut } from './guards';
+import { session } from './session';
+
+/** A guard's arguments for an address, as the router gives them to a loader */
+const args = (url: string, id?: string) =>
+  ({ request: new Request(new URL(url, 'http://localhost')), params: id === undefined ? {} : { id }, context: undefined }) as unknown as LoaderFunctionArgs;
+/** Where a guard's redirect goes, as an address in the app */
+const redirectTo = (answer: unknown) => answer instanceof Response ? answer.headers.get('Location') : null;
+
+// The rules that follow the session (expiry, the idle timeout, the accessible view), as the Angular Session's effects,
+// with a router that goes wherever it is sent, as the Angular tests' one with a route for every address
+let path = '/';
+beforeAll(() => session.start(async to => { path = to; }, () => path));
+
+const email = (roleId: string) => DEMO_ACCOUNTS.find(account => account.roleId === roleId)!.email;
+const sample = createMockData(0);
+const anyone = (status: string) => sample.users.find(user => user.status === status)!;
+
+/** For the tests that sign in again and again, each request with the sample's short pause */
+const LONG = 15_000;
+
+const draft = (roleId: string): UserDraft => ({
+  firstName: 'Ada', lastName: 'Lovelace', email: `ada.${roleId}@example.com`, phone: '', department: 'Design', roles: [{ roleId, endsAt: null }],
+  status: 'invited', avatar: '',
+});
+
+describe('Session and permissions', () => {
+  const store = adminStore;
+
+  const signInAs = (roleId: string) => session.signIn(email(roleId), 'any-password', false);
+  /** Someone other than the signed-in user who holds this role and no other */
+  const userWithRole = (roleId: string) => store.state.users.find(user => activeRoleIds(user).join() === roleId && user.id !== session.view.userId)!;
+  const hours = (count: number) => new Date(Date.now() + count * 60 * 60_000).toISOString();
+
+  beforeEach(() => freshUserManagement());
+
+  describe('signing in', () => {
+    it('starts signed out and picks the session up again after a reload', async () => {
+      await session.restore();
+      expect(session.view.signedIn).toBe(false);
+
+      await signInAs('manager');
+      const reloaded = new LocalAdminApi();
+      expect((await reloaded.getSession())?.email).toBe(email('manager'));
+    });
+
+    it('logs a refused sign-in of someone who exists, with why, and nothing for an unknown email', async () => {
+      const suspended = anyone('suspended');
+      await expect(session.signIn(suspended.email, 'any-password', false)).rejects.toEqual(new AdminApiError('account_suspended'));
+      await expect(session.signIn('nobody@example.com', 'any-password', false)).rejects.toEqual(new AdminApiError('invalid_credentials'));
+      await signInAs('admin');
+      const failed = store.state.activity.filter(entry => entry.action === 'auth.sign_in_failed');
+      expect(failed).toHaveLength(1);
+      expect(failed[0]).toMatchObject({ actorId: suspended.id, targetId: suspended.id, changes: [{ field: 'cause', to: 'suspended' }] });
+    });
+
+    it('refuses unknown people, short passwords, and accounts that are not active', async () => {
+      await expect(session.signIn('nobody@example.com', 'any-password', false)).rejects.toEqual(new AdminApiError('invalid_credentials'));
+      await expect(session.signIn(email('admin'), '123', false)).rejects.toEqual(new AdminApiError('invalid_credentials'));
+      await expect(session.signIn(anyone('suspended').email, 'any-password', false)).rejects.toEqual(new AdminApiError('account_suspended'));
+      await expect(session.signIn(anyone('invited').email, 'any-password', false)).rejects.toEqual(new AdminApiError('invite_pending'));
+      expect(session.view.signedIn).toBe(false);
+    });
+
+    it('forgets the data on sign-out, and the server refuses requests after it', async () => {
+      await signInAs('admin');
+      await session.signOut();
+
+      expect(session.view.signedIn).toBe(false);
+      expect(store.state.users).toEqual([]);
+      await expect(adminApi().listUsers()).rejects.toEqual(new AdminApiError('unauthenticated'));
+    });
+
+    it('notices when the server says the session has ended', async () => {
+      await signInAs('admin');
+      sessionStorage.clear();
+
+      await expect(store.resetPassword(userWithRole('viewer').id)).rejects.toEqual(new AdminApiError('unauthenticated'));
+      expect(session.view.signedIn).toBe(false);
+    });
+  });
+
+  describe('what each role can do', () => {
+    it('shows a viewer the users but not the activity log, and refuses their changes', async () => {
+      await signInAs('viewer');
+
+      expect(store.state.users.length).toBe(48);
+      expect(store.state.activity).toEqual([]);
+      expect(session.view.can('users.view')).toBe(true);
+      expect(session.view.can('users.delete')).toBe(false);
+      await expect(store.deleteUsers([userWithRole('viewer').id])).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.createUser(draft('viewer'))).rejects.toEqual(new AdminApiError('forbidden'));
+    });
+
+    it('lets a manager give only roles within their own permissions', async () => {
+      await signInAs('manager');
+
+      expect(session.view.canAssign(selectRolesById(store.state).get('support'))).toBe(true);
+      expect(session.view.canAssign(selectRolesById(store.state).get('admin'))).toBe(false);
+      await expect(store.createUser(draft('admin'))).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.createUser(draft('support'))).resolves.toMatchObject({ roles: [expect.objectContaining({ roleId: 'support', endsAt: null })] });
+    });
+
+    it('stops a manager from changing an administrator', async () => {
+      await signInAs('manager');
+      const admin = userWithRole('admin');
+
+      expect(session.view.canManage(admin)).toBe(false);
+      expect(session.view.canManage(userWithRole('viewer'))).toBe(true);
+      await expect(store.updateUser(admin.id, { phone: '0899999999' })).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.resetPassword(admin.id)).rejects.toEqual(new AdminApiError('forbidden'));
+    });
+
+    it('stops anyone from suspending, deleting or promoting themselves', async () => {
+      await signInAs('admin');
+      const me = session.view.userId!;
+
+      await expect(store.setUserStatus([me], 'suspended')).rejects.toEqual(new AdminApiError('self_change'));
+      await expect(store.deleteUsers([me])).rejects.toEqual(new AdminApiError('self_change'));
+      await expect(store.assignRole({ userId: me, roleId: 'viewer', endsAt: null })).rejects.toEqual(new AdminApiError('self_change'));
+      await expect(store.updateUser(me, { phone: '0899999999' })).resolves.toMatchObject({ phone: '0899999999' });
+    });
+
+    it('lets nobody change the permissions of a role they hold, but other details are fine', async () => {
+      await signInAs('admin');
+      const role = await store.createRole({ name: 'Keeper', description: '', tone: 'info', permissions: ['users.view', 'roles.view', 'roles.manage'] });
+      const keeper = await store.createUser({ ...draft(role.id), status: 'active' });
+      await session.signOut();
+      await session.signIn(keeper.email, 'any-password', false);
+
+      await expect(store.updateRole(role.id, { permissions: ['users.view'] })).rejects.toEqual(new AdminApiError('self_change'));
+      await expect(store.updateRole(role.id, { description: 'Keeps roles' })).resolves.toMatchObject({ description: 'Keeps roles' });
+    });
+
+    it('keeps the name and permissions of a built-in role; its color and rules for giving it can change', async () => {
+      await signInAs('admin');
+
+      await expect(store.updateRole('manager', { permissions: ['users.view'] })).rejects.toEqual(new AdminApiError('system_role'));
+      await expect(store.updateRole('manager', { name: 'Boss' })).rejects.toEqual(new AdminApiError('system_role'));
+      await expect(store.updateRole('manager', { tone: 'warning', assignment: { maxDays: 30, reasonRequired: true } }))
+        .resolves.toMatchObject({ tone: 'warning', assignment: { maxDays: 30, reasonRequired: true } });
+    });
+
+    it('keeps roles read-only without roles.manage', async () => {
+      await signInAs('support');
+
+      expect(store.state.roles.length).toBe(14);
+      await expect(store.createRole({ name: 'X', description: '', tone: 'info', permissions: [] })).rejects.toEqual(new AdminApiError('forbidden'));
+    });
+  });
+
+  describe('what the server refuses outright', () => {
+    it('takes only the fields a request may set', async () => {
+      await signInAs('admin');
+      const api = adminApi();
+      const someone = userWithRole('viewer');
+
+      await expect(api.updateUser(someone.id, { id: 'u-001' } as never)).rejects.toEqual(new AdminApiError('invalid_request'));
+      await expect(api.updateRole('admin', { system: false } as never)).rejects.toEqual(new AdminApiError('invalid_request'));
+      await expect(api.updateUser(someone.id, { status: 'boss' } as never)).rejects.toEqual(new AdminApiError('invalid_request'));
+      await expect(api.updateUser(someone.id, { email: 'x@corp.example@evil.example' })).rejects.toEqual(new AdminApiError('invalid_request'));
+    });
+
+    it('stops anyone from changing or deleting a role stronger than their own', async () => {
+      await signInAs('admin');
+      const roleManager = await store.createRole({ name: 'Role manager', description: '', tone: 'info', permissions: ['roles.view', 'roles.manage'] });
+      await store.createUser({ ...draft(roleManager.id), status: 'active', email: 'rm@example.com' });
+      await session.signOut();
+      await session.signIn('rm@example.com', 'any-password', false);
+
+      expect(session.view.canAssign(selectRolesById(store.state).get('admin'))).toBe(false);
+      await expect(store.updateRole('admin', { permissions: ['users.view'] })).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.updateRole('admin', { description: 'Changed' })).rejects.toEqual(new AdminApiError('forbidden'));
+    });
+
+    it('keeps the default role for new users', async () => {
+      await signInAs('admin');
+      const role = await store.createRole({ name: 'Interns', description: '', tone: 'info', permissions: [] });
+      await store.updateSettings({ defaultRoleId: role.id });
+
+      await expect(store.deleteRole(role.id)).rejects.toEqual(new AdminApiError('default_role'));
+    });
+  });
+
+  describe('importing', () => {
+    it('adds every user in one go, or none when one is refused', async () => {
+      await signInAs('manager');
+      const before = store.state.users.length;
+
+      await expect(store.createUsers([draft('viewer'), draft('admin')])).rejects.toEqual(new AdminApiError('forbidden'));
+      expect((await adminApi().listUsers()).length).toBe(before);
+
+      const created = await store.createUsers([draft('viewer'), { ...draft('support'), email: 'bo@example.com' }]);
+      expect(created.map(user => user.email)).toEqual(['ada.viewer@example.com', 'bo@example.com']);
+      expect(store.state.users.length).toBe(before + 2);
+      await expect(store.createUsers([{ ...draft('viewer'), email: 'cy@example.com' }, { ...draft('viewer'), email: 'CY@example.com' }]))
+        .rejects.toEqual(new AdminApiError('email_taken'));
+    });
+  });
+
+  describe('your own account', () => {
+    it('lets anyone change their own name, phone and photo, but nothing else without users.edit', async () => {
+      await signInAs('viewer');
+      const me = session.view.userId!;
+
+      await expect(store.updateUser(me, { firstName: 'Tee', phone: '0811111111' })).resolves.toMatchObject({ firstName: 'Tee' });
+      expect(session.view.user?.firstName).toBe('Tee');
+      await expect(store.updateUser(me, { email: 'new@example.com' })).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.updateUser(userWithRole('viewer').id, { phone: '0811111111' })).rejects.toEqual(new AdminApiError('forbidden'));
+      expect(canEditUser(args(`/users/${me}/edit`, me))).toBeNull();
+    });
+
+    it('keeps the language of their emails, a preference the activity log leaves out', async () => {
+      await signInAs('viewer');
+      const me = session.view.userId!;
+      const logged = store.state.activity.length;
+
+      await expect(store.updateUser(me, { language: 'en' })).resolves.toMatchObject({ language: 'en' });
+      await expect(store.updateUser(me, { language: null })).resolves.toMatchObject({ language: null });
+      await expect(store.updateUser(me, { language: 'fr' as never })).rejects.toEqual(new AdminApiError('invalid_request'));
+      expect(store.state.activity.filter(entry => entry.action === 'user.updated' && entry.targetId === me)).toHaveLength(0);
+      expect(store.state.activity.length).toBe(logged);
+    });
+
+    it('invites someone in the language picked for them, or the settings one', async () => {
+      await signInAs('admin');
+      expect(store.state.settings.defaultLanguage).toBe('th');
+      const picked = await store.createUser({ ...draft('viewer'), language: 'en' });
+      const left = await store.createUser({ ...draft('support') });
+      expect([picked.language, left.language]).toEqual(['en', null]);
+
+      await store.updateSettings({ defaultLanguage: 'en' });
+      expect(store.state.activity[0]).toMatchObject({ action: 'settings.updated', changes: [{ field: 'defaultLanguage', from: 'th', to: 'en' }] });
+      await expect(store.updateSettings({ defaultLanguage: 'fr' as never })).rejects.toEqual(new AdminApiError('invalid_request'));
+    });
+
+    it('changes the password, and sign-in then needs the new one', async () => {
+      await signInAs('support');
+      const account = email('support');
+
+      await expect(session.changePassword('wrong', 'short')).rejects.toEqual(new AdminApiError('invalid_credentials'));
+      await expect(session.changePassword('any-password', 'short')).rejects.toEqual(new AdminApiError('weak_password'));
+      await session.changePassword('any-password', 'a-new-password');
+      await session.signOut();
+
+      await expect(session.signIn(account, 'any-password', false)).rejects.toEqual(new AdminApiError('invalid_credentials'));
+      await expect(session.signIn(account, 'a-new-password', false)).resolves.toMatchObject({ email: account });
+      expect(store.state.activity.some(entry => entry.action === 'user.password_changed')).toBe(true);
+    });
+  });
+
+  describe('signed-in devices', () => {
+    it('lists where someone is signed in, this browser first among equals, and signs the others out', async () => {
+      await signInAs('admin');
+      const me = session.view.userId!;
+
+      const before = await store.listSessions(me);
+      expect(before.filter(item => item.current).length).toBe(1);
+      expect(before.length).toBeGreaterThan(1);
+
+      await store.endSessions(me);
+      const after = await store.listSessions(me);
+      expect(after.map(item => item.current)).toEqual([true]);
+      expect(store.state.activity[0]).toMatchObject({ action: 'auth.sessions_ended', targetId: me });
+    });
+
+    it('lets administrators end other people’s sessions, and nobody else', async () => {
+      await signInAs('viewer');
+      const other = userWithRole('support');
+      await expect(store.listSessions(other.id)).rejects.toEqual(new AdminApiError('forbidden'));
+      await session.signOut();
+
+      await signInAs('admin');
+      const sessions = await store.listSessions(other.id);
+      await store.endSession(sessions[0].id);
+      expect((await store.listSessions(other.id)).length).toBe(sessions.length - 1);
+    });
+
+    it('ends the sessions of someone who is suspended', async () => {
+      await signInAs('admin');
+      const someone = store.state.users.find(user => user.status === 'active' && user.id !== session.view.userId && user.lastActiveAt)!;
+      expect((await store.listSessions(someone.id)).length).toBeGreaterThan(0);
+
+      await store.setUserStatus([someone.id], 'suspended', 'Left the company');
+      expect(await store.listSessions(someone.id)).toEqual([]);
+    });
+  });
+
+  describe('two-step sign-in', () => {
+    it('turns on with a code from the app, and is then needed to sign in', async () => {
+      await signInAs('support');
+      const account = email('support');
+
+      const setup = await store.startTwoFactor();
+      expect(setup.uri).toContain(`secret=${setup.secret}`);
+      await expect(store.confirmTwoFactor('000000')).rejects.toEqual(new AdminApiError('invalid_code'));
+      await store.confirmTwoFactor(await totp(setup.secret));
+      expect(session.view.user?.twoFactor).toBe(true);
+      await session.signOut();
+
+      await expect(session.signIn(account, 'any-password', false)).rejects.toEqual(new AdminApiError('two_factor_required'));
+      await expect(session.signIn(account, 'any-password', false, '000000')).rejects.toEqual(new AdminApiError('invalid_code'));
+      await session.signIn(account, 'any-password', false, await totp(setup.secret));
+      expect(session.view.signedIn).toBe(true);
+
+      await store.disableTwoFactor(await totp(setup.secret));
+      expect(session.view.user?.twoFactor).toBe(false);
+    });
+
+    it('gives ten recovery codes, each good once in place of a code from the app', async () => {
+      await signInAs('support');
+      const account = email('support');
+      const setup = await store.startTwoFactor();
+      const { recoveryCodes } = await store.confirmTwoFactor(await totp(setup.secret));
+      expect(recoveryCodes).toHaveLength(10);
+      expect(recoveryCodes.every(code => /^[a-z2-9]{5}-[a-z2-9]{5}$/.test(code))).toBe(true);
+      expect(await store.recoveryCodesLeft()).toBe(10);
+      await session.signOut();
+
+      // Case, spaces and the dash do not matter; each works once
+      await session.signIn(account, 'any-password', false, recoveryCodes[0].toUpperCase().replace('-', ' '));
+      await session.signOut();
+      await expect(session.signIn(account, 'any-password', false, recoveryCodes[0])).rejects.toEqual(new AdminApiError('invalid_code'));
+      await session.signIn(account, 'any-password', false, recoveryCodes[1]);
+      expect(await store.recoveryCodesLeft()).toBe(8);
+      expect(store.state.activity[1]).toMatchObject({
+        action: 'auth.recovery_code_used', actorId: session.view.userId, targetId: session.view.userId, changes: [{ field: 'recoveryCodesLeft', to: '8' }],
+      });
+
+      // New ones replace them; turning it off, with one of them, deletes the rest
+      const fresh = await store.createRecoveryCodes();
+      expect(fresh.some(code => recoveryCodes.includes(code))).toBe(false);
+      await expect(store.disableTwoFactor(recoveryCodes[2])).rejects.toEqual(new AdminApiError('invalid_code'));
+      await store.disableTwoFactor(fresh[0]);
+      expect(session.view.user?.twoFactor).toBe(false);
+      expect(await store.recoveryCodesLeft()).toBe(0);
+    }, LONG);
+
+    it('can be turned off for someone who lost their phone, by an administrator', async () => {
+      await signInAs('support');
+      const setup = await store.startTwoFactor();
+      await store.confirmTwoFactor(await totp(setup.secret));
+      const supportId = session.view.userId!;
+      await session.signOut();
+
+      await signInAs('admin');
+      await expect(store.resetTwoFactor(session.view.userId!)).rejects.toEqual(new AdminApiError('self_change'));
+      await expect(store.resetTwoFactor(supportId)).resolves.toMatchObject({ twoFactor: false });
+      await session.signOut();
+      await expect(signInAs('support')).resolves.toBeTruthy();
+    });
+  });
+
+  describe('role assignments', () => {
+    it('gives someone a second role for a time, with its own entry in the log', async () => {
+      await signInAs('admin');
+      const someone = userWithRole('viewer');
+
+      const user = await store.assignRole({ userId: someone.id, roleId: 'support', endsAt: hours(1), reason: 'Covering for a colleague' });
+
+      expect(activeRoleIds(user)).toEqual(['viewer', 'support']);
+      expect(activeRoleIds(user, Date.now() + 2 * 60 * 60_000)).toEqual(['viewer']);
+      expect(store.state.activity[0]).toMatchObject({
+        action: 'role_assignment.added', targetId: someone.id,
+        changes: [{ field: 'roleId', to: 'support' }, { field: 'endsAt' }], reason: 'Covering for a colleague',
+      });
+    });
+
+    it('follows each role\'s own rules, and gives a role once at a time', async () => {
+      await signInAs('admin');
+      const someone = userWithRole('viewer');
+      // Contractor: at most 90 days, with a reason
+      const contractor = { userId: someone.id, roleId: 'contractor' };
+
+      await expect(store.assignRole({ ...contractor, endsAt: null, reason: 'Project' })).rejects.toEqual(new AdminApiError('assignment_too_long'));
+      await expect(store.assignRole({ ...contractor, endsAt: hours(24 * 91), reason: 'Project' })).rejects.toEqual(new AdminApiError('assignment_too_long'));
+      await expect(store.assignRole({ ...contractor, endsAt: hours(24 * 30) })).rejects.toEqual(new AdminApiError('reason_required'));
+      const user = await store.assignRole({ ...contractor, endsAt: hours(24 * 30), reason: 'Project' });
+      await expect(store.assignRole({ ...contractor, endsAt: hours(24), reason: 'Again' })).rejects.toEqual(new AdminApiError('already_assigned'));
+      await expect(store.assignRole({ userId: someone.id, roleId: 'viewer', endsAt: null })).rejects.toEqual(new AdminApiError('already_assigned'));
+
+      // Moved: still within its rules
+      const assignment = user.roles.find(item => item.roleId === 'contractor')!;
+      await expect(store.updateRoleAssignment(assignment.id, { endsAt: hours(24 * 100) })).rejects.toEqual(new AdminApiError('assignment_too_long'));
+      await expect(store.updateRoleAssignment(assignment.id, { endsAt: hours(24 * 60) })).resolves.toMatchObject({ id: someone.id });
+      await expect(store.removeRoleAssignment(assignment.id)).resolves.toMatchObject({ roles: [expect.objectContaining({ roleId: 'viewer' })] });
+    });
+
+    it('gives a role to several people at once and takes it away, skipping those it does not change', async () => {
+      await signInAs('admin');
+      const viewers = store.state.users.filter(user => activeRoleIds(user).join() === 'viewer').slice(0, 2).map(user => user.id);
+
+      expect((await store.assignRoles(viewers, { add: { roleId: 'support', endsAt: null } })).length).toBe(2);
+      expect((await store.assignRoles(viewers, { add: { roleId: 'support', endsAt: null } })).length).toBe(0);
+      expect((await store.assignRoles(viewers, { removeRoleId: 'support' })).map(user => activeRoleIds(user))).toEqual([['viewer'], ['viewer']]);
+      await expect(store.assignRoles([session.view.userId!], { removeRoleId: 'admin' })).rejects.toEqual(new AdminApiError('self_change'));
+    });
+
+    it('keeps someone who can run the system: an active administrator for good', async () => {
+      await signInAs('admin');
+      const owner = session.view.userId!;
+      // Everyone else's administrator role goes; the owner keeps theirs
+      const others = store.state.users.filter(user => user.id !== owner && activeRoleIds(user).includes('admin')).map(user => user.id);
+      await store.assignRoles(others, { removeRoleId: 'admin' });
+      // Someone gets it for a day only
+      const helper = store.state.users.find(user => user.status === 'active' && activeRoleIds(user).join() === 'viewer')!;
+      await store.assignRole({ userId: helper.id, roleId: 'admin', endsAt: hours(24) });
+      await session.signOut();
+      await session.signIn(helper.email, 'any-password', false);
+      const ownerRole = selectUsersById(store.state).get(owner)!.roles.find(item => item.roleId === 'admin')!;
+
+      await expect(store.removeRoleAssignment(ownerRole.id)).rejects.toEqual(new AdminApiError('last_administrator'));
+      await expect(store.updateRoleAssignment(ownerRole.id, { endsAt: hours(48) })).rejects.toEqual(new AdminApiError('last_administrator'));
+      await expect(store.setUserStatus([owner], 'suspended', 'Test')).rejects.toEqual(new AdminApiError('last_administrator'));
+      await expect(store.deleteUsers([owner], 'Test')).rejects.toEqual(new AdminApiError('last_administrator'));
+    });
+
+    it('ends an assignment on time: the role stops counting, and the server logs it once', async () => {
+      await signInAs('admin');
+      const someone = userWithRole('viewer');
+      await store.assignRole({ userId: someone.id, roleId: 'support', endsAt: hours(1) });
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(Date.now() + 2 * 60 * 60_000);
+        await store.refresh();
+        await store.refresh();
+        const ended = store.state.activity.filter(entry => entry.action === 'role_assignment.expired' && entry.targetId === someone.id);
+        expect(ended).toEqual([expect.objectContaining({ actorId: null, changes: [{ field: 'roleId', from: 'support' }] })]);
+        // It stays on the profile, ended, until the log forgets it
+        expect(selectUsersById(store.state).get(someone.id)!.roles.map(item => item.roleId)).toEqual(['viewer', 'support']);
+        expect(activeRoleIds(selectUsersById(store.state).get(someone.id))).toEqual(['viewer']);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('does not delete a role someone will hold later', async () => {
+      await signInAs('admin');
+      const role = await store.createRole({ name: 'Later', description: '', tone: 'info', permissions: ['users.view'] });
+      await store.assignRole({ userId: userWithRole('viewer').id, roleId: role.id, startsAt: hours(24), endsAt: hours(48) });
+
+      await expect(store.deleteRole(role.id)).rejects.toEqual(new AdminApiError('role_in_use'));
+    });
+  });
+
+  describe('conflicting roles', () => {
+    const active = (roleId: string) => store.state.users.find(user => user.status === 'active' && activeRoleIds(user).join() === roleId)!;
+
+    it('refuses a role that a rule says cannot be held with one held then, in any scope', async () => {
+      await signInAs('admin');
+      const someone = active('viewer');
+      await store.createRoleConflict({ name: 'Viewers do not bill', roleIds: ['viewer', 'finance'] });
+
+      await expect(store.assignRole({ userId: someone.id, roleId: 'finance', endsAt: null })).rejects.toEqual(new AdminApiError('role_conflict'));
+      await expect(store.assignRole({ userId: someone.id, roleId: 'finance', branchId: 'b-cnx', endsAt: null }))
+        .rejects.toEqual(new AdminApiError('role_conflict'));
+      await expect(store.createUser({ ...draft('viewer'), roles: [{ roleId: 'viewer', endsAt: null }, { roleId: 'finance', endsAt: null }] }))
+        .rejects.toEqual(new AdminApiError('role_conflict'));
+    });
+
+    it('counts the times: one that ends before the other starts is fine, until its end moves', async () => {
+      await signInAs('admin');
+      const someone = active('viewer');
+      await store.createRoleConflict({ name: 'HR is not audited by itself', roleIds: ['hr', 'auditor'] });
+      await store.assignRole({ userId: someone.id, roleId: 'hr', startsAt: hours(48), endsAt: null });
+
+      await expect(store.assignRole({ userId: someone.id, roleId: 'auditor', endsAt: null })).rejects.toEqual(new AdminApiError('role_conflict'));
+      const user = await store.assignRole({ userId: someone.id, roleId: 'auditor', endsAt: hours(24) });
+      const auditor = user.roles.find(item => item.roleId === 'auditor')!;
+      await expect(store.updateRoleAssignment(auditor.id, { endsAt: hours(72) })).rejects.toEqual(new AdminApiError('role_conflict'));
+    });
+
+    it('keeps the rules to people who manage roles, and lists the people a new rule finds', async () => {
+      await signInAs('admin');
+      // The sample has someone who held Auditor and Support before the rule was made
+      expect(selectRoleConflictViolations(store.state).map(item => item.rule.id)).toContain('rc-audit');
+      await expect(store.createRoleConflict({ name: 'One role', roleIds: ['viewer'] })).rejects.toEqual(new AdminApiError('invalid_request'));
+      await expect(store.createRoleConflict({ name: 'Ghost', roleIds: ['viewer', 'ghost'] })).rejects.toEqual(new AdminApiError('not_found'));
+
+      const rule = await store.createRoleConflict({ name: 'Support is not HR', roleIds: ['support', 'hr'] });
+      expect(store.state.activity[0]).toMatchObject({
+        action: 'role_conflict.created', targetId: rule.id, changes: [{ field: 'name', to: 'Support is not HR' }, { field: 'roles', added: ['support', 'hr'] }],
+      });
+      await store.updateRoleConflict(rule.id, { roleIds: ['support', 'onboarding'] });
+      expect(store.state.activity[0].changes).toEqual([{ field: 'roles', added: ['onboarding'], removed: ['hr'] }]);
+
+      await session.signOut();
+      await signInAs('manager');
+      await expect(store.deleteRoleConflict(rule.id)).rejects.toEqual(new AdminApiError('forbidden'));
+    });
+
+    it('drops a rule left with one role when a role is deleted', async () => {
+      await signInAs('admin');
+      const role = await store.createRole({ name: 'Temporary desk', description: '', tone: 'info', permissions: ['users.view'] });
+      await store.createRoleConflict({ name: 'Desk is not billing', roleIds: [role.id, 'finance'] });
+      await store.deleteRole(role.id);
+
+      expect(store.state.roleConflicts.some(rule => rule.name === 'Desk is not billing')).toBe(false);
+    });
+  });
+
+  describe('reasons', () => {
+    it('asks for a reason where the settings say so, and keeps any given in the log', async () => {
+      await signInAs('admin');
+      const someone = store.state.users.find(user => user.status === 'active' && activeRoleIds(user).join() === 'viewer')!;
+
+      // Suspending needs one on a new installation
+      await expect(store.setUserStatus([someone.id], 'suspended')).rejects.toEqual(new AdminApiError('reason_required'));
+      await expect(store.setUserStatus([someone.id], 'suspended', '   ')).rejects.toEqual(new AdminApiError('reason_required'));
+      await store.setUserStatus([someone.id], 'suspended', '  Left the company ');
+      expect(store.state.activity[0]).toMatchObject({ action: 'user.suspended', targetId: someone.id, reason: 'Left the company' });
+
+      // Taking a role away does not, but keeps one given
+      const user = await store.assignRole({ userId: someone.id, roleId: 'support', endsAt: null });
+      await store.removeRoleAssignment(user.roles.find(item => item.roleId === 'support')!.id, 'Project over');
+      expect(store.state.activity[0]).toMatchObject({ action: 'role_assignment.removed', reason: 'Project over' });
+      await store.assignRole({ userId: someone.id, roleId: 'support', endsAt: null });
+      await store.assignRoles([someone.id], { removeRoleId: 'support' });
+      expect(store.state.activity[0].reason).toBeUndefined();
+    });
+
+    it('follows the settings, and never asks about your own sessions', async () => {
+      await signInAs('admin');
+      const someone = userWithRole('viewer');
+      await store.updateSettings({ reasonsRequired: ['removeRole', 'endSessions'] });
+      expect(store.state.activity[0].changes).toEqual([{ field: 'reasonsRequired', added: ['removeRole', 'endSessions'], removed: ['status', 'delete'] }]);
+      await expect(store.updateSettings({ reasonsRequired: ['nope'] as never })).rejects.toEqual(new AdminApiError('invalid_request'));
+
+      await store.setUserStatus([someone.id], 'suspended');
+      await store.assignRole({ userId: someone.id, roleId: 'support', endsAt: null });
+      await expect(store.assignRoles([someone.id], { removeRoleId: 'support' })).rejects.toEqual(new AdminApiError('reason_required'));
+      await expect(store.endSessions(someone.id)).rejects.toEqual(new AdminApiError('reason_required'));
+      await expect(store.endSessions(session.view.userId!)).resolves.toBeUndefined();
+      // A role given has its own reason, not the request's
+      await expect(adminApi().assignRoles([someone.id], { add: { roleId: 'auditor', endsAt: null }, reason: 'x' } as never))
+        .rejects.toEqual(new AdminApiError('invalid_request'));
+    });
+  });
+
+  describe('branches', () => {
+    it('adds, renames and closes a branch, each code once, and logs it', async () => {
+      await signInAs('admin');
+
+      const branch = await store.createBranch({ code: ' bkk-2 ', name: 'Bangkok 2' });
+      expect(branch).toMatchObject({ code: 'BKK-2', name: 'Bangkok 2', active: true });
+      await expect(store.createBranch({ code: 'Bkk-2', name: 'Again' })).rejects.toEqual(new AdminApiError('code_taken'));
+      await expect(store.createBranch({ code: 'TOO-LONG-CODE', name: 'Long' })).rejects.toEqual(new AdminApiError('invalid_request'));
+
+      await store.updateBranch(branch.id, { name: 'Bangkok East', active: false });
+      expect(selectBranchesById(store.state).get(branch.id)).toMatchObject({ name: 'Bangkok East', active: false });
+      expect(selectOpenBranches(store.state).some(item => item.id === branch.id)).toBe(false);
+      expect(store.state.activity[0]).toMatchObject({
+        action: 'branch.updated', targetId: branch.id,
+        changes: [{ field: 'name', from: 'Bangkok 2', to: 'Bangkok East' }, { field: 'active', from: 'true', to: 'false' }],
+      });
+    });
+
+    it('keeps a branch people belong to, and takes nobody into a closed one', async () => {
+      await signInAs('admin');
+      const someone = userWithRole('viewer');
+      const branch = await store.createBranch({ code: 'KKC', name: 'Khon Kaen' });
+
+      await store.updateUser(someone.id, { branchId: branch.id });
+      await expect(store.deleteBranch(branch.id)).rejects.toEqual(new AdminApiError('branch_in_use'));
+      await store.updateUser(someone.id, { branchId: null });
+      await store.updateBranch(branch.id, { active: false });
+      await expect(store.updateUser(someone.id, { branchId: branch.id })).rejects.toEqual(new AdminApiError('branch_closed'));
+      await expect(store.assignRole({ userId: someone.id, roleId: 'support', branchId: branch.id, endsAt: null })).rejects.toEqual(new AdminApiError('branch_closed'));
+      await expect(store.createUser({ ...draft('viewer'), branchId: branch.id })).rejects.toEqual(new AdminApiError('branch_closed'));
+
+      await store.deleteBranch(branch.id);
+      expect(selectBranchesById(store.state).has(branch.id)).toBe(false);
+    });
+
+    it('gives a role for one branch: it allows what it allows there only, and once per branch', async () => {
+      await signInAs('admin');
+      const someone = store.state.users.find(user => user.status === 'active' && activeRoleIds(user).join() === 'viewer')!;
+      const grant = { userId: someone.id, roleId: 'manager', endsAt: null };
+
+      await store.assignRole({ ...grant, branchId: 'b-cnx' });
+      await expect(store.assignRole({ ...grant, branchId: 'b-cnx' })).rejects.toEqual(new AdminApiError('already_assigned'));
+      await store.assignRole({ ...grant, branchId: 'b-hkt' });
+      // A branch's assignment is not the whole organization's
+      expect(store.holdsOrWillHold(selectUsersById(store.state).get(someone.id)!, 'manager', null)).toBe(false);
+      expect(store.state.activity[0]).toMatchObject({ action: 'role_assignment.added', changes: expect.arrayContaining([{ field: 'branchId', to: 'b-hkt' }]) });
+
+      await session.signOut();
+      await session.signIn(someone.email, 'any-password', false);
+      expect(session.view.can('users.edit')).toBe(false);
+      expect(session.view.can('users.edit', 'b-cnx')).toBe(true);
+      expect(session.view.can('users.edit', 'b-hq')).toBe(false);
+      expect(session.view.branchesWith('users.edit').sort()).toEqual(['b-cnx', 'b-hkt']);
+      // User management's own permissions reach the people of those branches only (API.md, "Branch administrators")
+      const viewers = store.state.users.filter(user => user.id !== someone.id && activeRoleIds(user).join() === 'viewer');
+      await store.updateUser(viewers.find(user => user.branchId === 'b-cnx')!.id, { phone: '0800000000' });
+      await expect(store.updateUser(viewers.find(user => user.branchId === 'b-hq')!.id, { phone: '0800000000' }))
+        .rejects.toEqual(new AdminApiError('forbidden'));
+    });
+
+    it('counts only roles for the whole organization toward keeping an administrator', async () => {
+      await signInAs('admin');
+      const owner = session.view.userId!;
+      const others = store.state.users.filter(user => user.id !== owner && activeRoleIds(user).includes('admin')).map(user => user.id);
+      await store.assignRoles(others, { removeRoleId: 'admin' });
+      // Someone gets it for good, but for one branch, and for a day across the whole organization
+      const helper = store.state.users.find(user => user.status === 'active' && activeRoleIds(user).join() === 'viewer')!;
+      await store.assignRole({ userId: helper.id, roleId: 'admin', branchId: 'b-hq', endsAt: null });
+      await store.assignRole({ userId: helper.id, roleId: 'admin', endsAt: hours(24) });
+      await session.signOut();
+      await session.signIn(helper.email, 'any-password', false);
+      const ownerRole = selectUsersById(store.state).get(owner)!.roles.find(item => item.roleId === 'admin')!;
+
+      await expect(store.removeRoleAssignment(ownerRole.id)).rejects.toEqual(new AdminApiError('last_administrator'));
+    });
+  });
+
+  describe('branch administrators', () => {
+    const manager = () => DEMO_ACCOUNTS.find(account => account.roleName === 'Branch manager')!.email;
+    /** Someone in Chiang Mai with Finance, which allows no more than the manager's Viewer; and someone at the head office */
+    const own = () => store.state.users.find(user => user.branchId === 'b-cnx' && activeRoleIds(user).join() === 'finance')!;
+    const elsewhere = () => store.state.users.find(user => user.branchId === 'b-hq' && user.status === 'active')!;
+
+    it('looks after the people of their branch, giving roles limited to it', async () => {
+      await session.signIn(manager(), 'any-password', false);
+      expect(session.view.can('users.edit')).toBe(false);
+      expect(session.view.canSomewhere('users.edit')).toBe(true);
+      expect(session.view.canSomewhere('settings.view')).toBe(false);
+      expect(session.view.canOn('users.edit', own())).toBe(true);
+      expect(session.view.canOn('users.edit', elsewhere())).toBe(false);
+      expect(session.view.canOn('users.delete', own())).toBe(false);
+      const finance = selectRolesById(store.state).get('finance');
+      expect(session.view.canGive(finance, 'b-cnx')).toBe(true);
+      expect(session.view.canGive(finance, null)).toBe(false);
+      expect(session.view.canGive(selectRolesById(store.state).get('admin'), 'b-cnx')).toBe(false);
+
+      await store.updateUser(own().id, { department: 'Sales' });
+      await expect(store.updateUser(elsewhere().id, { department: 'Sales' })).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.updateUser(own().id, { branchId: 'b-hq' })).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.deleteUsers([own().id], 'Left the company')).rejects.toEqual(new AdminApiError('forbidden'));
+      await expect(store.assignRole({ userId: own().id, roleId: 'finance', endsAt: null })).rejects.toEqual(new AdminApiError('forbidden'));
+      await store.assignRole({ userId: own().id, roleId: 'finance', branchId: 'b-cnx', endsAt: null });
+
+      const added = { ...draft('viewer'), roles: [], branchId: 'b-cnx' };
+      await expect(store.createUser({ ...added, branchId: 'b-hq' })).rejects.toEqual(new AdminApiError('forbidden'));
+      const created = await store.createUser(added);
+      expect(created.roles.map(item => [item.roleId, item.branchId])).toEqual([['viewer', 'b-cnx']]);
+    });
+
+    it('reads the activity about the people of their branch only', async () => {
+      await session.signIn(manager(), 'any-password', false);
+      const people = new Set(store.state.users.filter(user => user.branchId === 'b-cnx').map(user => user.id));
+      expect(store.state.activity.length).toBeGreaterThan(0);
+      expect(store.state.activity.every(entry => !!entry.targetId && people.has(entry.targetId))).toBe(true);
+    });
+  });
+
+  describe('live updates', () => {
+    it('loads again when another tab changes the data, and notices when this session was ended there', async () => {
+      await signInAs('admin');
+      const revision = store.state.revision;
+
+      window.dispatchEvent(new StorageEvent('storage', { key: 'admin-data-v8' }));
+      await vi.waitFor(() => expect(store.state.revision).toBe(revision + 1), { timeout: 3000 });
+
+      // Another tab signs this browser's session out
+      const data = JSON.parse(localStorage.getItem('admin-data-v8')!);
+      data.sessions = data.sessions.filter((item: { userId: string }) => item.userId !== session.view.userId);
+      localStorage.setItem('admin-data-v8', JSON.stringify(data));
+      window.dispatchEvent(new StorageEvent('storage', { key: 'admin-data-v8' }));
+      await vi.waitFor(() => expect(session.view.signedIn).toBe(false), { timeout: 3000 });
+    });
+  });
+
+  describe('the accessible view', () => {
+    beforeEach(() => {
+      useUiAccessibleView.getState().set(true);
+    });
+    afterEach(() => {
+      useUiAccessibleView.getState().set(false);
+      document.body.classList.remove('ui-aaa');
+    });
+
+    it('keeps changes made in another tab waiting until asked for', async () => {
+      await signInAs('admin');
+      const revision = store.state.revision;
+      const someone = userWithRole('viewer');
+
+      const data = JSON.parse(localStorage.getItem('admin-data-v8')!);
+      data.users.find((user: { id: string }) => user.id === someone.id).department = 'Elsewhere';
+      localStorage.setItem('admin-data-v8', JSON.stringify(data));
+      window.dispatchEvent(new StorageEvent('storage', { key: 'admin-data-v8' }));
+      await vi.waitFor(() => expect(store.state.changesWaiting).toBe(true), { timeout: 3000 });
+      expect(store.state.revision).toBe(revision);
+      expect(selectUsersById(store.state).get(someone.id)?.department).toBe(someone.department);
+
+      await store.showChanges();
+      expect(store.state.changesWaiting).toBe(false);
+      expect(selectUsersById(store.state).get(someone.id)?.department).toBe('Elsewhere');
+    });
+
+    it('keeps the page when the session ends, for signing in again over it', async () => {
+      await signInAs('admin');
+      sessionStorage.clear();
+
+      await expect(store.resetPassword(userWithRole('viewer').id)).rejects.toEqual(new AdminApiError('unauthenticated'));
+      expect(session.view.paused).toBe('ended');
+      expect(session.view.signedIn).toBe(true);
+      expect(store.state.users.length).toBeGreaterThan(0);
+
+      await expect(session.resume('123')).rejects.toEqual(new AdminApiError('invalid_credentials'));
+      await session.resume('any-password');
+      expect(session.view.paused).toBe(null);
+      expect(store.state.sessionEnded).toBe(false);
+      await expect(store.resetPassword(userWithRole('viewer').id)).resolves.toBeUndefined();
+    });
+
+    it('keeps messages until they are dismissed', () => {
+      vi.useFakeTimers();
+      try {
+        const id = useUiToast.getState().show('Saved');
+        vi.advanceTimersByTime(60_000);
+        expect(useUiToast.getState().toasts.map(toast => toast.message)).toEqual(['Saved']);
+        useUiToast.getState().dismiss(id);
+        expect(useUiToast.getState().toasts).toEqual([]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('settings', () => {
+    it('lets an administrator change them, and logs what changed', async () => {
+      await signInAs('admin');
+
+      const settings = await store.updateSettings({ allowedDomains: ['Example.com', ' example.com ', 'corp.example'], inviteExpiryDays: 14 });
+
+      expect(settings.allowedDomains).toEqual(['example.com', 'corp.example']);
+      expect(store.state.activity[0]).toMatchObject({
+        action: 'settings.updated',
+        changes: [{ field: 'inviteExpiryDays', from: '7', to: '14' }, { field: 'allowedDomains', added: ['example.com', 'corp.example'], removed: [] }],
+      });
+    });
+
+    it('keeps them read-only without settings.manage', async () => {
+      await signInAs('manager');
+
+      expect(store.state.settings.defaultRoleId).toBe('viewer');
+      await expect(store.updateSettings({ inviteExpiryDays: 30 })).rejects.toEqual(new AdminApiError('forbidden'));
+    });
+
+    it('only accepts new emails on the allowed domains', async () => {
+      await signInAs('admin');
+      await store.updateSettings({ allowedDomains: ['corp.example'] });
+      const someone = userWithRole('viewer');
+
+      await expect(store.createUser(draft('viewer'))).rejects.toEqual(new AdminApiError('email_domain'));
+      await expect(store.createUser({ ...draft('viewer'), email: 'ada@corp.example' })).resolves.toMatchObject({ email: 'ada@corp.example' });
+      // Someone who already has an email elsewhere keeps it
+      await expect(store.updateUser(someone.id, { email: someone.email, phone: '0899999999' })).resolves.toMatchObject({ phone: '0899999999' });
+    });
+
+    it('signs people out after the idle timeout', async () => {
+      await signInAs('admin');
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
+      try {
+        await store.updateSettings({ sessionTimeoutMinutes: 15 });
+
+        vi.advanceTimersByTime(14 * 60_000);
+        expect(session.view.signedIn).toBe(true);
+        expect(useUiToast.getState().toasts.map(toast => toast.message)).toContain(
+          'You will be signed out in a minute. Click anywhere to stay signed in.');
+
+        vi.advanceTimersByTime(60_000);
+        await vi.waitFor(() => expect(session.view.signedIn).toBe(false), { timeout: 2000 });
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('accounts nobody uses, and idle sessions', () => {
+    const STORAGE = 'admin-data-v8';
+    const longAgo = new Date(Date.now() - 100 * 24 * 60 * 60_000).toISOString();
+    /** Changes the saved sample data, as time passing would */
+    const change = (edit: (data: { users: { id: string; lastActiveAt: string | null; createdAt: string }[] }) => void) => {
+      const data = JSON.parse(localStorage.getItem(STORAGE)!);
+      edit(data);
+      localStorage.setItem(STORAGE, JSON.stringify(data));
+    };
+
+    it('suspends accounts nobody used for the settings days, with no actor', async () => {
+      await signInAs('admin');
+      await store.updateSettings({ suspendInactiveDays: 30 });
+      const idle = store.state.users.find(user => user.status === 'active' && activeRoleIds(user).join() === 'viewer' && user.id !== session.view.userId)!;
+      change(data => data.users.filter(user => user.id === idle.id).forEach(user => user.lastActiveAt = longAgo));
+
+      await store.refresh();
+      expect(selectUsersById(store.state).get(idle.id)?.status).toBe('suspended');
+      expect(store.state.activity.find(entry => entry.action === 'user.suspended' && entry.targetId === idle.id)).toMatchObject({
+        actorId: null, changes: [{ field: 'status', from: 'active', to: 'suspended' }, { field: 'inactiveDays', to: '30' }],
+      });
+    });
+
+    it('never suspends the last one who can run the system', async () => {
+      await signInAs('admin');
+      await store.updateSettings({ suspendInactiveDays: 30 });
+      change(data => data.users.forEach(user => {
+        user.lastActiveAt = longAgo;
+        user.createdAt = longAgo;
+      }));
+
+      // Any request reads the data, as the nightly job runs
+      await new LocalAdminApi().getSession();
+      const saved = JSON.parse(localStorage.getItem(STORAGE)!) as AdminData;
+      expect(saved.users.filter(user => user.status === 'active')).toHaveLength(1);
+      expect(administratorRemains(saved.users, saved.roles, ALL_PERMISSIONS)).toBe(true);
+    });
+
+    it('ends a session the server side too, after the idle timeout without a request', async () => {
+      await signInAs('admin');
+      await store.updateSettings({ sessionTimeoutMinutes: 15 });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(Date.now() + 20 * 60_000);
+        await expect(new LocalAdminApi().listUsers()).rejects.toEqual(new AdminApiError('unauthenticated'));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('access reviews', () => {
+    const STORAGE = 'admin-data-v8';
+    const inDays = (days: number) => new Date(Date.now() + days * 24 * 60 * 60_000).toISOString();
+    const idOf = (address: string) => sample.users.find(user => user.email === address)!.id;
+    const branchManager = () => DEMO_ACCOUNTS.find(account => account.roleName === 'Branch manager')!.email;
+
+    it('covers the roles held now or later, and lets the people who look after each person decide', async () => {
+      await signInAs('admin');
+      const viewers = store.state.users.filter(user => user.roles.some(item => item.roleId === 'viewer' && roleAssignmentState(item) !== 'expired'));
+      const review = await store.startAccessReview({ name: ' Viewers ', roleId: 'viewer', dueAt: inDays(7) });
+
+      expect(review).toMatchObject({ name: 'Viewers', status: 'open', itemCount: viewers.length, decidedCount: 0, waitingCount: viewers.length });
+      expect(store.state.accessReviews[0].id).toBe(review.id);
+      expect(store.state.activity[0]).toMatchObject({
+        action: 'access_review.started', actorId: session.view.userId, targetId: review.id,
+        changes: [{ field: 'roleId', to: 'viewer' }, { field: 'dueAt', to: review.dueAt }, { field: 'assignments', to: String(viewers.length) }],
+      });
+      const items = await store.accessReviewItems(review.id);
+      expect(items.every(item => item.roleId === 'viewer' && item.roleName === 'Viewer' && item.canDecide && item.decision === null)).toBe(true);
+
+      const [kept, removed] = items;
+      await store.decideAccessReview(review.id, [kept.id], 'keep');
+      const [decided] = await store.decideAccessReview(review.id, [removed.id], 'remove', ' Left the team ');
+      expect(decided).toMatchObject({ decision: 'remove', note: 'Left the team', decidedById: session.view.userId });
+      expect(store.state.accessReviews[0]).toMatchObject({ decidedCount: 2, waitingCount: viewers.length - 2 });
+      expect(store.state.activity[0]).toMatchObject({ action: 'access_review.decided', reason: 'Left the team', changes: [{ field: 'decision', to: 'remove' }, { field: 'assignments', to: '1' }] });
+      // Nothing is taken away before it closes
+      expect(selectUsersById(store.state).get(removed.userId)!.roles.some(item => item.id === removed.assignmentId)).toBe(true);
+
+      await expect(store.startAccessReview({ name: 'Too far', dueAt: inDays(400) })).rejects.toEqual(new AdminApiError('invalid_request'));
+      await expect(store.startAccessReview({ name: 'Ghost', roleId: 'nope', dueAt: inDays(7) })).rejects.toEqual(new AdminApiError('not_found'));
+    });
+
+    it('takes away the roles decided Remove when someone closes it, and is then the record', async () => {
+      const manager = email('manager');
+      await signInAs('admin');
+      const review = await store.startAccessReview({ name: 'Support', roleId: 'support', dueAt: inDays(7), reviewerIds: [idOf(manager)] });
+      await session.signOut();
+
+      // Named, a manager decides all of it, and the settings may ask why
+      await session.signIn(manager, 'any-password', false);
+      expect(canSeeAccessReviews(args('/access-reviews'))).toBeNull();
+      const items = await store.accessReviewItems(review.id);
+      expect(items.length).toBeGreaterThan(2);
+      await store.decideAccessReview(review.id, [items[0].id], 'remove', 'Moved to sales');
+      await store.decideAccessReview(review.id, [items[1].id], 'keep');
+      await expect(store.closeAccessReview(review.id)).rejects.toEqual(new AdminApiError('forbidden'));
+      await session.signOut();
+
+      await signInAs('admin');
+      const closed = await store.closeAccessReview(review.id);
+      expect(closed).toMatchObject({ status: 'closed', closedById: session.view.userId, waitingCount: 0 });
+      const outcomes = new Map((await store.accessReviewItems(review.id)).map(item => [item.id, item.outcome]));
+      expect(outcomes.get(items[0].id)).toBe('removed');
+      expect(outcomes.get(items[1].id)).toBe('kept');
+      expect(outcomes.get(items[2].id)).toBe('not_reviewed');
+      expect(selectUsersById(store.state).get(items[0].userId)!.roles.some(item => item.id === items[0].assignmentId)).toBe(false);
+      expect(store.state.activity[0]).toMatchObject({
+        action: 'access_review.closed', actorId: session.view.userId,
+        changes: [{ field: 'kept', to: '1' }, { field: 'removed', to: '1' }, { field: 'notReviewed', to: String(items.length - 2) }],
+      });
+      expect(store.state.activity[1]).toMatchObject({
+        action: 'role_assignment.removed', actorId: null, targetId: items[0].userId, reason: 'Moved to sales',
+        changes: [{ field: 'roleId', from: 'support' }, { field: 'accessReview', to: 'Support' }],
+      });
+
+      await expect(store.decideAccessReview(review.id, [items[2].id], 'keep')).rejects.toEqual(new AdminApiError('review_closed'));
+      await expect(store.deleteAccessReview(review.id)).rejects.toEqual(new AdminApiError('review_closed'));
+    }, LONG);
+
+    it('closes by itself at its due date, keeping the last one who can run the system', async () => {
+      const manager = email('manager');
+      await signInAs('admin');
+      const review = await store.startAccessReview({ name: 'Administrators', roleId: 'admin', dueAt: inDays(1), reviewerIds: [idOf(manager)] });
+      await session.signOut();
+      await session.signIn(manager, 'any-password', false);
+      const items = await store.accessReviewItems(review.id);
+      await store.decideAccessReview(review.id, items.map(item => item.id), 'remove');
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(Date.now() + 2 * 24 * 60 * 60_000);
+        // Any request reads the data, as the server's job runs
+        await new LocalAdminApi().getSession();
+      } finally {
+        vi.useRealTimers();
+      }
+      const saved = JSON.parse(localStorage.getItem(STORAGE)!) as AdminData;
+      const closed = saved.accessReviews!.find(item => item.id === review.id)!;
+      expect(closed).toMatchObject({ status: 'closed', closedById: null, closedAt: review.dueAt });
+      expect(closed.items.filter(item => item.outcome === 'last_administrator')).toHaveLength(1);
+      expect(administratorRemains(saved.users, saved.roles, ALL_PERMISSIONS)).toBe(true);
+      expect(saved.activity.find(entry => entry.action === 'access_review.closed' && entry.targetId === review.id)).toMatchObject({ actorId: null });
+    }, LONG);
+
+    it('shows a branch administrator the people of their branch to decide, and someone without a part nothing', async () => {
+      await session.signIn(branchManager(), 'any-password', false);
+      const review = store.state.accessReviews.find(item => item.id === 'ar-quarter')!;
+      expect(review.waitingCount).toBeGreaterThan(0);
+      expect(store.state.accessReviews.some(item => item.id === 'ar-support')).toBe(false);
+      const people = selectUsersById(store.state);
+      const items = await store.accessReviewItems(review.id);
+      expect(items.length).toBeGreaterThan(0);
+      expect(items.every(item => item.canDecide && people.get(item.userId)?.branchId === 'b-cnx' && item.userId !== session.view.userId)).toBe(true);
+      // Their own role is in it, but nobody decides about their own roles
+      const saved = JSON.parse(localStorage.getItem(STORAGE)!) as AdminData;
+      const own = saved.accessReviews!.find(item => item.id === review.id)!.items.find(item => item.userId === session.view.userId)!;
+      await expect(store.decideAccessReview(review.id, [own.id], 'keep')).rejects.toEqual(new AdminApiError('self_change'));
+      await session.signOut();
+
+      await signInAs('viewer');
+      expect(store.state.accessReviews).toEqual([]);
+      expect(selectAccessReviewsWaiting(store.state)).toBe(0);
+      await expect(store.accessReviewItems('ar-quarter')).rejects.toEqual(new AdminApiError('not_found'));
+      expect(canSeeAccessReviews(args('/access-reviews'))).toEqual({ noAccess: true });
+    });
+  });
+
+  describe('guards', () => {
+    it('sends people who are not signed in to sign in, and back afterwards', () => {
+      expect(redirectTo(signedIn(args('/users?q=ann')))).toBe('/login?returnUrl=%2Fusers%3Fq%3Dann');
+    });
+
+    it('shows the no-access page at the address that was asked for', async () => {
+      await signInAs('viewer');
+
+      expect(requirePermission('users.view')(args('/users'))).toBeNull();
+      // The no-access page in place of the page, at the same address
+      expect(requirePermission('activity.view')(args('/activity'))).toEqual({ noAccess: true });
+    });
+
+    it('lets everyone open their own profile, and only editors edit people they may manage', async () => {
+      await signInAs('support');
+      const me = session.view.userId!;
+
+      expect(canViewUser(args(`/users/${me}`, me))).toBeNull();
+      expect(canEditUser(args('/users/x/edit', userWithRole('viewer').id))).toBeNull();
+      expect(canEditUser(args('/users/x/edit', userWithRole('admin').id))).toEqual({ noAccess: true });
+    });
+
+    it('sends someone already signed in away from the sign-in page, to the first page their role allows', async () => {
+      await signInAs('viewer');
+
+      expect(redirectTo(signedOut(args('/login')))).toBe('/overview');
+    });
+
+    it('opens their own profile first for a role without users.view', async () => {
+      await signInAs('admin');
+      const role = await store.createRole({ name: 'Auditor', description: '', tone: 'info', permissions: [] });
+      const auditor = await store.createUser({ ...draft(role.id), status: 'active' });
+      await session.signOut();
+
+      await session.signIn(auditor.email, 'any-password', false);
+
+      expect(store.state.users.map(user => user.id)).toEqual([auditor.id]);
+      expect(session.view.homeUrl()).toBe(`/users/${auditor.id}`);
+    });
+  });
+});
