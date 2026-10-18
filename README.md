@@ -40,7 +40,8 @@ npm run dev
 | คำสั่ง | ทำอะไร |
 | --- | --- |
 | `npm run dev` | รัน dev server (Vite) ที่พอร์ต 4300 ส่งต่อ `/api` ไปที่ `http://localhost:8080` สำหรับ API จริง |
-| `npm run build` | ตรวจ type แล้ว build สำหรับ production ลง `dist/` |
+| `npm run build` | ตรวจ type แล้ว build สำหรับ production ลง `dist/` build นี้อ่านข้อมูลจากเซิร์ฟเวอร์ที่ `/api` (ดูหัวข้อเชื่อมต่อ API จริง) และไม่มีบัญชีตัวอย่าง |
+| `npm run build:demo` | build แบบเดียวกันแต่ใช้ข้อมูลตัวอย่างในเบราว์เซอร์และมีบัญชีตัวอย่าง เหมือน `npm run dev` ใช้สำหรับสาธิตเท่านั้น ห้ามใช้งานจริง |
 | `npm run preview` | เปิด build ใน `dist/` ที่พอร์ต 4300 |
 | `npm test` | รัน unit test ด้วย Vitest (jsdom) |
 | `npm run e2e` | รัน e2e ใน `e2e/` ด้วย Playwright บน Google Chrome กับ dev server (เปิดให้เองถ้ายังไม่ได้รัน) |
@@ -91,7 +92,7 @@ npm run dev
 
 ## เชื่อมต่อ API จริง
 
-`HttpAdminApi` เรียก endpoint ใน [API.md](src/app/user-management/API.md) รัน `../admin-api-starter` (Spring Boot) ที่ `http://localhost:8080` แล้วเปลี่ยนใน `src/main.tsx`:
+`HttpAdminApi` เรียก endpoint ใน [API.md](src/app/user-management/API.md) production build (`npm run build`) ใช้ตัวนี้อยู่แล้ว ที่ `/api` บน origin เดียวกับแอป ส่วน `npm run dev` และ `npm run build:demo` ใช้ข้อมูลตัวอย่างแทน (ตัดสินจาก `import.meta.env.MODE` ใน `src/main.tsx`) ถ้าจะพัฒนากับเซิร์ฟเวอร์จริง ให้รัน `../admin-api-starter` (Spring Boot) ที่ `http://localhost:8080` แล้วรัน `npx vite --mode production` หรือแก้ `sampleData` ใน `src/main.tsx` ให้เป็น `false` ซึ่งจะเรียก:
 
 ```ts
 configureUserManagement({ api: new HttpAdminApi({ url: '/api', events: true }) });

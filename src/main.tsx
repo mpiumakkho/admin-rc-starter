@@ -9,11 +9,14 @@ import { routes } from './app/app.routes';
 import { useLanguage } from './app/layout/language.service';
 import { session } from './app/user-management/access/session';
 import { configureUserManagement } from './app/user-management/config';
+import { HttpAdminApi } from './app/user-management/data/http-admin-api';
 
-// Users, roles and activity, from sample data kept in the browser; the session is picked up before the first screen.
-// For a real backend, such as ../admin-api-starter on port 8080, which npm run dev reaches as /api (vite.config.ts):
-// configureUserManagement({ api: new HttpAdminApi({ url: '/api', events: true }) }), see user-management/API.md
-configureUserManagement();
+// Users, roles and activity; the session is picked up before the first screen. The production build reads them from the
+// server, such as ../admin-api-starter, at /api on the app's own origin (npm run dev forwards /api to port 8080,
+// vite.config.ts; see user-management/API.md). npm run dev and npm run build:demo (mode demo) use sample data kept in
+// the browser, so a build meant for real use never runs on sample data with no real sign-in.
+const sampleData = import.meta.env.MODE !== 'production';
+configureUserManagement(sampleData ? {} : { api: new HttpAdminApi({ url: '/api', events: true }) });
 useLanguage.getState().init();
 await session.restore();
 
