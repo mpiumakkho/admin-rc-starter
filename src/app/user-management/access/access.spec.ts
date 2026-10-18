@@ -434,6 +434,8 @@ describe('Session and permissions', () => {
       await signInAs('admin');
       const someone = userWithRole('viewer');
       await store.assignRole({ userId: someone.id, roleId: 'support', endsAt: hours(1) });
+      // Two hours go by with no request: not signed out for being idle, which is not what this is about
+      await store.updateSettings({ sessionTimeoutMinutes: 0 });
 
       vi.useFakeTimers({ toFake: ['Date'] });
       try {
@@ -731,6 +733,8 @@ describe('Session and permissions', () => {
     });
 
     it('keeps messages until they are dismissed', () => {
+      // Without what earlier tests left, such as the idle timeout said at sign-in
+      useUiToast.setState({ toasts: [] });
       vi.useFakeTimers();
       try {
         const id = useUiToast.getState().show('Saved');
