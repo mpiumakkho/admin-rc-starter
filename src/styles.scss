@@ -1,0 +1,449 @@
+// Global styles: the Sarabun font, the base look of plain HTML elements, and the few rules for <body> itself.
+// Everything else lives in the components' own stylesheets. Colors, radii and shadows come from the --ui-*
+// variables in user-management/ui/ui.scss, which follow the light or dark theme.
+
+@use 'assets/scss/fonts';
+
+/* Base: a small reset, so plain elements look the same in every browser; components style what they draw */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  // Whatever gets focus scrolls clear of the navbar fixed along the top (64 pixels), never under it (WCAG 2.4.12)
+  scroll-padding-top: calc(64px + 1rem);
+}
+
+body {
+  margin: 0;
+  // Nothing reaches sideways past the window, such as the sidebar while it slides
+  overflow-x: hidden;
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: .875rem;
+  font-weight: 400;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0 0 .5rem;
+  color: var(--ui-heading);
+  font-weight: 600;
+  letter-spacing: -.011em;
+  line-height: 1.3;
+}
+
+h1 {
+  font-size: 2rem;
+  letter-spacing: -.022em;
+}
+
+h2 {
+  font-size: 1.625rem;
+  letter-spacing: -.02em;
+}
+
+h3 {
+  font-size: 1.375rem;
+  letter-spacing: -.017em;
+}
+
+h4 {
+  font-size: 1.125rem;
+}
+
+h5 {
+  font-size: 1rem;
+}
+
+h6 {
+  font-size: .875rem;
+}
+
+// Paragraphs keep the body size even inside smaller text, such as a dialog's steps or an alert's title
+p {
+  margin: 0 0 1rem;
+  font-size: .875rem;
+  line-height: 1.6;
+}
+
+ul,
+ol {
+  margin: 0 0 1rem;
+  padding-inline-start: 1rem;
+}
+
+li {
+  line-height: 1.8;
+}
+
+b,
+strong {
+  font-weight: bolder;
+}
+
+small {
+  font-size: .875em;
+}
+
+a {
+  color: var(--ui-primary-text);
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+
+  &:not([href]):not([class]) {
+    color: inherit;
+    text-decoration: none;
+  }
+}
+
+// Inline code, such as a permission key
+code {
+  padding: .125rem .375rem;
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-hover);
+  color: var(--ui-text);
+  font-family: var(--ui-font-mono);
+  font-size: .8125rem;
+  overflow-wrap: break-word;
+}
+
+pre {
+  margin: 0 0 1rem;
+  padding: 1rem;
+  overflow: auto;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  background: var(--ui-surface-muted);
+  color: var(--ui-heading);
+  font-family: var(--ui-font-mono);
+  font-size: .8125rem;
+}
+
+kbd {
+  font-family: var(--ui-font-mono);
+}
+
+img,
+svg {
+  vertical-align: middle;
+}
+
+svg {
+  overflow: hidden;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+th {
+  text-align: inherit;
+}
+
+label {
+  display: inline-block;
+}
+
+// Form controls take the text around them instead of the browser's small system font
+button,
+input,
+select,
+textarea {
+  margin: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+button:not(:disabled),
+[role="button"] {
+  cursor: pointer;
+}
+
+textarea {
+  overflow: auto;
+  resize: vertical;
+}
+
+[type="search"] {
+  appearance: none;
+  outline-offset: -2px;
+}
+
+::-webkit-search-decoration {
+  appearance: none;
+}
+
+::-webkit-file-upload-button {
+  font: inherit;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ui-primary) 20%, transparent);
+}
+
+/* Focus: always visible from the keyboard, quiet for the mouse. Text fields draw their own ring. */
+
+:focus-visible:not(input, textarea, select) {
+  outline: 2px solid var(--ui-focus) !important;
+  outline-offset: 2px;
+}
+
+input:focus,
+select:focus,
+textarea:focus,
+[tabindex="-1"]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Thin scrollbars that stay out of the way, the same in both themes */
+
+* {
+  scrollbar-color: rgba(148, 163, 184, .45) transparent;
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(148, 163, 184, .45);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* <body> */
+
+// The page behind the menu, open over it on smaller screens, does not scroll
+@media (max-width: 991px) {
+  body.menu-open {
+    overflow: hidden;
+  }
+}
+
+// Shown by index.html until the app starts: the app's frame for someone signed in last time (body.booting-signed-in),
+// a spinner for everyone else. The sizes match the navbar and sidebar in app.component.scss.
+.boot-frame {
+  display: none;
+}
+
+body.booting-signed-in {
+  .main-spinner-wrapper {
+    display: none;
+  }
+
+  .boot-frame {
+    position: fixed;
+    inset: 0;
+    display: block;
+    background: var(--ui-bg);
+  }
+}
+
+.boot-navbar {
+  position: absolute;
+  inset: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  height: 64px;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.boot-sidebar {
+  position: absolute;
+  inset: 64px auto 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  width: 256px;
+  padding: 1.25rem 1rem;
+  border-inline-end: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+}
+
+.boot-main {
+  position: absolute;
+  inset: 64px 0 0 256px;
+  display: flex;
+  flex-direction: column;
+  gap: .625rem;
+  padding: 2.25rem 2rem;
+}
+
+.boot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  background: var(--ui-surface);
+}
+
+.boot-block {
+  display: block;
+  height: .875rem;
+  border-radius: var(--ui-radius-sm);
+  background: var(--ui-border);
+  animation: boot-pulse 1s ease-in-out infinite alternate;
+}
+
+.boot-logo { width: 7rem; height: 1.5rem; }
+.boot-search { width: min(26rem, calc(var(--ui-100vw) * .4)); height: 2.25rem; }
+.boot-avatar { width: 2.25rem; height: 2.25rem; margin-inline-start: auto; border-radius: 50%; }
+.boot-title { width: 14rem; height: 1.5rem; }
+.boot-subtitle { width: 20rem; max-width: 100%; }
+
+@keyframes boot-pulse {
+  to {
+    opacity: .55;
+  }
+}
+
+@media (max-width: 991px) {
+  .boot-sidebar {
+    display: none;
+  }
+
+  .boot-main {
+    inset-inline-start: 0;
+    padding: 1.5rem 1rem;
+  }
+}
+
+.main-spinner-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--ui-100vh);
+  background: var(--ui-bg);
+
+  .donut {
+    width: 4rem;
+    height: 4rem;
+    border: .3rem solid color-mix(in srgb, var(--ui-success) 30%, transparent);
+    border-top-color: var(--ui-success);
+    border-radius: 50%;
+    animation: spin 1.5s linear infinite;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The accessible view (ui-aaa on <body>, see ui.scss): the app's own frame, at 44-pixel targets and 7:1 text */
+
+body.ui-aaa {
+  // The show-password button beside the field rather than over its end, so it covers none of the field (2.4.12)
+  .input-icon:has(> .input-action) {
+    display: flex;
+    gap: .5rem;
+
+    .ui-input {
+      flex: 1;
+      min-width: 0;
+      padding-inline-end: .875rem;
+    }
+
+    .input-action {
+      position: static;
+      flex-shrink: 0;
+      border: 1px solid var(--ui-border-strong);
+      transform: none;
+    }
+  }
+
+  .icon-button,
+  .user-button,
+  .navbar-brand,
+  #sidebar .nav-link:not(.nav-category .nav-link),
+  .search-input,
+  .auth-link,
+  .demo-account,
+  .input-action,
+  .ui-crumbs a,
+  .target-link,
+  .person-link,
+  .timeline-link,
+  .subject-clear,
+  .search-result,
+  .swatch {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .auth-link,
+  .ui-crumbs a,
+  .target-link,
+  .person-link {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  // White on the sign-in and error pages' indigo, made deep enough for 7:1 everywhere
+  app-auth-aside {
+    background: linear-gradient(160deg, #312e81, #1e1b4b) !important;
+  }
+}
+
+// Forced colors: the current page in the menu, the role being edited, the result picked with the arrow keys and the
+// chosen color are marked with the system highlight, as ui.scss does for its own parts. The colors to choose from keep
+// their own color; it is what they show.
+@media (forced-colors: active) {
+  #sidebar .nav-item.active:not(.nav-group):not(.navbar-brand-mini-wrapper) > .nav-link,
+  #sidebar .sub-menu .nav-link.active,
+  .role-item.active,
+  .search-result.active {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  #sidebar .sub-menu .nav-link.active::before {
+    display: none;
+  }
+
+  .swatch {
+    forced-color-adjust: none;
+
+    &.selected {
+      outline: 3px solid Highlight;
+      outline-offset: 2px;
+    }
+  }
+}
