@@ -33,7 +33,7 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 | `POST /auth/refresh` | | `{ accessToken, expiresIn, user }` ชุดใหม่และ refresh cookie ใหม่ ตอบ `401` `unauthenticated` เมื่อไม่มี cookie, cookie หมดอายุหรือถูกใช้ไปแล้ว, session จบแล้ว หรือบัญชีไม่ active แล้ว |
 | `POST /auth/logout` | | ไม่มี จบ session ของ refresh cookie และล้าง cookie ใช้ได้แม้ access token หมดอายุแล้ว และตอบเหมือนกันเมื่อไม่มี cookie |
 | `GET /me` | | `User` ที่เข้าสู่ระบบอยู่ |
-| `POST /me/password` | `{ currentPassword, newPassword }` | ไม่มี `invalid_credentials` เมื่อรหัสผ่านปัจจุบันผิด `weak_password` หรือ `password_reused` เมื่อรหัสใหม่ผิดกฎรหัสผ่านด้านล่าง |
+| `POST /me/password` | `{ currentPassword, newPassword }` | ไม่มี `invalid_credentials` เมื่อรหัสผ่านปัจจุบันผิด ซึ่งนับรวมใน lockout เหมือนตอนเข้าสู่ระบบ (ระหว่างล็อกตอบแบบเดียวกัน) `weak_password` หรือ `password_reused` เมื่อรหัสใหม่ผิดกฎรหัสผ่านด้านล่าง |
 
 การปฏิเสธตอนเข้าสู่ระบบ: `invalid_credentials`, `account_suspended` (สถานะ `suspended`), `invite_pending` (สถานะ `invited`), `two_factor_required`, `invalid_code` รหัสผ่านผิดถูกนับ: ผิดติดกัน 5 ครั้ง บัญชีถูกล็อก 1 นาที แล้วนานขึ้นเท่าตัวทุกครั้ง (สูงสุด 30 นาที) ระหว่างนั้นตอบ `invalid_credentials` ตลอด เพื่อไม่ให้ใครรู้ว่าบัญชีไหนมีอยู่ request จาก address เดียวมากเกินไปให้ปฏิเสธด้วย `429` `too_many_requests` เมื่อสำเร็จ ให้บันทึก session (เบราว์เซอร์ ระบบปฏิบัติการ IP) สำหรับรายการอุปกรณ์ เขียน `auth.sign_in` ลงประวัติการใช้งาน และอัปเดต `lastActiveAt` ซึ่งการ refresh แต่ละครั้งก็อัปเดตด้วย: คือเวลาที่คนนั้นใช้แอปครั้งล่าสุด
 
@@ -101,7 +101,7 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 | `POST /users/:id/sessions/end` | `{ reason? }` สำหรับคนอื่น (ดูเหตุผล) | ไม่มี จบทุก session ของผู้ใช้ ถ้าเป็นของตัวเอง จบทั้งหมดยกเว้นอันปัจจุบัน |
 | `POST /me/two-factor` | | `TwoFactorSetup`: `secret` แบบ base32 ชุดใหม่และ `uri` แบบ `otpauth://` เก็บรอไว้จนกว่าจะยืนยัน ตอบ `invalid_request` ระหว่างที่เปิด 2 ขั้นตอนอยู่ จะเปลี่ยนแอป authenticator ต้องปิดก่อนด้วยรหัส แล้วจึงเปิดใหม่ |
 | `POST /me/two-factor/confirm` | `{ code }` | `TwoFactorConfirmation`: `{ user, recoveryCodes }` คือ `User` ที่ `twoFactor: true` และรหัสกู้คืนชุดแรก `invalid_code` ถ้ารหัสไม่ตรงกับ secret ที่รอไว้ |
-| `POST /me/two-factor/disable` | `{ code }` | `User` ที่ `twoFactor: false` `invalid_code` ถ้ารหัสผิด |
+| `POST /me/two-factor/disable` | `{ code }` | `User` ที่ `twoFactor: false` `invalid_code` ถ้ารหัสผิด ซึ่งนับรวมใน lockout เหมือนตอนเข้าสู่ระบบ (ระหว่างล็อกตอบแบบเดียวกัน) |
 | `POST /users/:id/two-factor/reset` | `{ reason? }` (ดูเหตุผล) | `User` ที่ `twoFactor: false` ต้องมี `users.edit` ทำกับตัวเองเป็น `self_change` |
 | `GET /me/recovery-codes` | | `{ remaining }`: รหัสกู้คืนของคุณที่ยังไม่ได้ใช้เหลือกี่ตัว |
 | `POST /me/recovery-codes` | | `{ codes }`: รหัสกู้คืนใหม่สิบตัวแทนชุดเดิม `invalid_request` ระหว่างที่ปิด 2 ขั้นตอนอยู่ |
@@ -332,6 +332,6 @@ configureUserManagement({ api: new HttpAdminApi({ fetch: localBackend() }) });
 | `400` | `invalid_request`: ฟิลด์ที่ request ตั้งไม่ได้ หรือค่าผิดชนิด; `invalid_token`: ลิงก์ในอีเมลที่หมดอายุหรือถูกใช้แล้ว |
 | `409` | `email_taken`, `role_in_use`, `system_role`, `not_invited`, `default_role`, `already_assigned`, `last_administrator`, `code_taken`, `branch_in_use`, `branch_closed`, `role_conflict`, `review_closed` |
 | `422` | `email_domain`, `weak_password`, `password_reused`, `assignment_too_long`, `reason_required` |
-| `429` | `too_many_requests`: ความพยายามเข้าสู่ระบบ refresh หรือรีเซ็ตจาก address เดียวมากเกินไป |
+| `429` | `too_many_requests`: ความพยายามเข้าสู่ระบบ refresh หรือรีเซ็ตจาก address เดียวมากเกินไป หรือการตรวจรหัสผ่านหรือรหัส (`POST /me/reauthenticate`, `POST /me/password`, `POST /me/two-factor/disable`) มากเกินไป |
 
 ถ้าไม่มี code ที่รู้จัก `401` นับเป็น `unauthenticated`, `403` เป็น `forbidden`, `404` เป็น `not_found` และ `429` เป็น `too_many_requests` เมื่อการ refresh แก้ `unauthenticated` ไม่ได้ แอปพาคนนั้นไปเข้าสู่ระบบ แล้วพากลับมาหน้าที่อยู่ก่อนหน้า ความล้มเหลวอื่น (ออฟไลน์, `5xx`) แสดง "Something went wrong"
