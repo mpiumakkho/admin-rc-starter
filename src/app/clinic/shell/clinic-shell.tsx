@@ -31,6 +31,7 @@ const SWITCH_TO: Record<LanguageCode, string> = { th: 'เปลี่ยนเ�
 const TABS = [
   { key: 'queue', label: 'Queue', icon: NAV_ICONS.queue },
   { key: 'appointments', label: 'Appointments', icon: NAV_ICONS.appointments },
+  { key: 'register', label: 'Register', icon: NAV_ICONS.register },
   { key: 'encounter', label: 'Encounter', icon: NAV_ICONS.encounter },
   { key: 'orders', label: 'Orders', icon: NAV_ICONS.orders },
   { key: 'results', label: 'Results', icon: NAV_ICONS.results },
@@ -49,8 +50,8 @@ const MENU_POSITION: UiConnectedPosition[] = [
  * sidebar (app.tsx), and opens from the account menu, as the component gallery does. Its look is all in clinic.scss,
  * under .clinic.
  *
- *   bar           as the admin navbar: the workspace's brand; the tabs (queue, appointments, encounter, orders, results,
- *                 dispense: child routes); patient search, notifications, theme, display size, language, the person
+ *   bar           as the admin navbar: the workspace's brand; the tabs (queue, appointments, register, encounter, orders,
+ *                 results, dispense: child routes); patient search, notifications, theme, display size, language, the person
  *   main          the tab | the context rail; a side sheet slides out over the tab, one at a time
  */
 export function ClinicShellComponent() {

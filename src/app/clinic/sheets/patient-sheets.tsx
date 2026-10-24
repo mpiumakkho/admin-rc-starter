@@ -1,16 +1,18 @@
 /* The selected patient's sheets: quick view, patient, owner, notes, results, estimate (the design's sheets/index.tsx) */
 import { useState } from 'react';
 
-import { lucideCheck, lucideChevronRight, lucideUserRound } from '../../icons';
+import { lucideArrowRight, lucideCheck, lucideChevronRight, lucideFileText, lucideUserRound } from '../../icons';
 import { cx, NgIcon, UiButton } from '../../user-management/ui';
 import { clinicActions, clinicNavigate } from '../clinic-actions';
 import { clinicUi } from '../clinic-ui';
 import { useClinicStore } from '../clinic.store';
-import { ALERT_META, locOf, STAGES, stageIndex, stageMinutes, statusOf, timeOf } from '../data/model';
+import { ALERT_META, locOf, STAGES, stageIndex, stageMinutes, statusOf } from '../data/model';
+import { CONSENT_TEXT, consentState, nextAppointment, pastVisits, resultsNewestFirst, resultsToReview } from '../data/rail';
 import type { ClinicalAlert, Patient } from '../data/types';
 import { useClinicI18n } from '../i18n/clinic-i18n';
 import { ALERT_ICONS } from '../shared/icons';
 import { PetIcon, VStepper } from '../shared/parts';
+import { OpenRow, ResultRow } from './rail-sheets';
 import { SheetHead } from './sheet-head';
 
 /** The patient's sections, in the order of the context rail */
@@ -231,21 +233,45 @@ export function PatientSheet({ tab = 'overview' }: { tab?: string }) {
             </div>
           </div>
         );
-      case 'visits':
+      case 'visits': {
+        const next = nextAppointment(store.data, p);
         return (
-          <div className="section">
-            <div className="section-title"><h3>{tx('Visit history')}</h3></div>
-            <div className="timeline">
-              {p.visits.map((visit, index) => <div key={index} className="tl"><b>{visit[0]}</b><div className="secondary">{tx(visit[1])}</div></div>)}
+          <>
+            <div className="section">
+              <div className="section-title"><h3>{tx('Visit ปัจจุบัน')}</h3></div>
+              <OpenRow name={`${tx('วันนี้')} · ${tx(p.reason)}`} detail={`${tx(p.vet)} · ${tx(STAGES[stageIndex(p)].label)} · ${p.code}`}
+                onOpen={() => clinicUi.openSheet('visit')} />
             </div>
-          </div>
+            {next && (
+              <div className="section">
+                <div className="section-title"><h3>{tx('นัดถัดไป')}</h3></div>
+                <OpenRow name={`${next.date} · ${next.time} · ${tx(next.type)}`} detail={`${tx(next.provider)} · ${tx(next.reason)}`}
+                  onOpen={() => clinicUi.openSheet('appointment', { id: next.id })} />
+              </div>
+            )}
+            <div className="section">
+              <div className="section-title"><h3>{tx('Visit history')}</h3></div>
+              <div className="kv-list">
+                {pastVisits(p).map(visit => (
+                  <OpenRow key={visit.date} name={`${visit.date} · ${tx(visit.title)}`} detail={tx(visit.vet)}
+                    onOpen={() => clinicUi.openSheet('pastVisit', { id: `${p.id}/${visit.date}` })} />
+                ))}
+                {!p.visits.length && <p className="muted">{tx('ยังไม่มีประวัติการมารักษา')}</p>}
+              </div>
+            </div>
+          </>
         );
+      }
       default:
         return (
           <div className="section">
             <div className="section-title"><h3>{tx('Documents')}</h3></div>
             <div className="kv-list">
-              {p.docs.map(doc => <RowCard key={doc[0]} name={tx(doc[0])} detail={tx(doc[1])} />)}
+              {p.docs.map((doc, index) => (
+                <OpenRow key={doc[0]} name={tx(doc[0])} detail={tx(doc[1])} onOpen={() => clinicUi.openSheet('document', { id: `${p.id}/${index}` })}>
+                  <NgIcon className="go-icon" svg={lucideFileText} aria-hidden="true" />
+                </OpenRow>
+              ))}
               {!p.docs.length && <p className="muted">{tx('ยังไม่มีเอกสาร')}</p>}
             </div>
           </div>
@@ -253,16 +279,29 @@ export function PatientSheet({ tab = 'overview' }: { tab?: string }) {
     }
   })();
 
+  /** Where the section's data is kept: the encounter, the appointments (vaccine recalls) or today's queue (the visits) */
+  const home = tab === 'vaccines' ? { label: 'เปิดนัดหมาย', path: '/clinic/appointments' } : tab === 'visits' ? { label: 'เปิดคิววันนี้', path: '/clinic/queue' } : null;
+  const goHome = () => {
+    if (home) {
+      clinicUi.closeSheet();
+      void clinicNavigate(home.path);
+    } else {
+      clinicActions.startEncounter(p);
+    }
+  };
+
   return (
     <cl-patient-sheet className="contents">
       <SheetHead heading={p.pet + ' · ' + p.hn} status={statusOf(p)} sub={tx(p.species) + ' · ' + p.breed + ' · ' + tx(p.sex) + ' · ' + tx(p.age)}
         tabs={PATIENT_TABS} activeTab={tab} />
       <div className="sheet-body">{body}</div>
       <div className="sheet-foot">
-        <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.addAlert(p)}>{tx('เพิ่ม alert')}</UiButton>
-        <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.addProblem(p)}>{tx('เพิ่ม problem')}</UiButton>
+        {/* What the section adds to, then the page that keeps it */}
+        {tab === 'alerts' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.addAlert(p)}>{tx('เพิ่ม alert')}</UiButton>}
+        {tab === 'problems' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.addProblem(p)}>{tx('เพิ่ม problem')}</UiButton>}
+        {tab === 'overview' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.recordWeight(p)}>{tx('บันทึกน้ำหนัก')}</UiButton>}
         <span className="grow"></span>
-        <UiButton size="sm" type="button" onClick={() => clinicActions.recordWeight(p)}>{tx('บันทึกน้ำหนัก')}</UiButton>
+        <UiButton size="sm" type="button" onClick={goHome}>{tx(home?.label ?? 'เปิด Encounter')}<NgIcon svg={lucideArrowRight} aria-hidden="true" /></UiButton>
       </div>
     </cl-patient-sheet>
   );
@@ -351,14 +390,22 @@ export function OwnerSheet({ tab = 'contact' }: { tab?: string }) {
             </div>
           </div>
         );
-      default:
+      default: {
+        const consent = consentState(o);
         return (
           <>
-            {section('Consent', tx(o.consent))}
+            <div className="section">
+              <div className="section-title">
+                <h3>{tx('Consent')}</h3>
+                <span className={`chip ${consent === 'valid' ? 'ok' : 'danger'}`}>{tx(CONSENT_TEXT[consent])}</span>
+              </div>
+              <p className="sheet-text">{o.consent === '—' ? tx('ยังไม่ได้ลงนามใบยินยอมการรักษา') : tx(o.consent)}</p>
+            </div>
             {section('PDPA', tx(o.pdpa))}
             {section('ประกัน', tx(o.insurance))}
           </>
         );
+      }
     }
   })();
 
@@ -370,8 +417,9 @@ export function OwnerSheet({ tab = 'contact' }: { tab?: string }) {
       <div className="sheet-body">{body}</div>
       <div className="sheet-foot">
         <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.callOwner(p)}>{tx('โทร')}</UiButton>
+        <UiButton variant="secondary" size="sm" type="button" onClick={message}>{tx('ส่งข้อความ')}</UiButton>
         <span className="grow"></span>
-        <UiButton size="sm" type="button" onClick={message}>{tx('ส่งข้อความ')}</UiButton>
+        <UiButton size="sm" type="button" onClick={() => clinicActions.openInRegistry(p)}>{tx('เปิดในทะเบียน')}<NgIcon svg={lucideArrowRight} aria-hidden="true" /></UiButton>
       </div>
     </cl-owner-sheet>
   );
@@ -429,12 +477,13 @@ export function NotesSheet() {
   );
 }
 
-/* ---- The patient's results in this visit ---- */
+/* ---- The patient's results, from every visit, newest first ---- */
 export function ResultsPreviewSheet() {
   const store = useClinicStore();
   const { tx } = useClinicI18n();
   const p = store.selected;
-  const results = store.resultsFor(p);
+  const results = resultsNewestFirst(store.data, p);
+  const review = resultsToReview(store.data, p).length;
 
   const inbox = () => {
     clinicUi.closeSheet();
@@ -443,30 +492,19 @@ export function ResultsPreviewSheet() {
 
   return (
     <cl-results-preview-sheet className="contents">
-      <SheetHead heading={tx('ผลตรวจ') + ' · ' + p.pet} sub={tx('{0} รายการใน visit ปัจจุบัน', { 0: results.length })} />
+      <SheetHead heading={tx('ผลตรวจ') + ' · ' + p.pet} sub={tx('{0} รายการ · {1} รายการผิดปกติรอรับทราบ', { 0: results.length, 1: review })} />
       <div className="sheet-body">
         <div className="section">
-          <div className="section-title"><h3>{tx('ผลตรวจใน visit นี้')}</h3></div>
+          <div className="section-title"><h3>{tx('ผลตรวจทั้งหมด ใหม่สุดก่อน')}</h3></div>
           <div className="kv-list">
-            {results.map(r => (
-              <div key={r.id} className={cx('row-card', r.flag === 'critical' && !r.ack && 'blocked')}>
-                <span className="grow">
-                  <b>{tx(r.name)}</b>
-                  <div className="secondary">
-                    {`${tx(r.status)} · ${timeOf(r.time)}`}
-                    {r.flag === 'critical' && <>{' · '}<b className="text-danger">{tx('Critical')}</b></>}
-                  </div>
-                </span>
-                <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicUi.openSheet('result', { id: r.id })}>{tx('เปิด')}</UiButton>
-              </div>
-            ))}
-            {!results.length && <p className="muted">{tx('ยังไม่มีผลตรวจใน visit นี้')}</p>}
+            {results.map(r => <ResultRow key={r.id} r={r} />)}
+            {!results.length && <p className="muted">{tx('ยังไม่มีผลตรวจ')}</p>}
           </div>
         </div>
       </div>
       <div className="sheet-foot">
         <span className="grow"></span>
-        <UiButton size="sm" type="button" onClick={inbox}>{tx('เปิด Results inbox')}</UiButton>
+        <UiButton size="sm" type="button" onClick={inbox}>{tx('เปิด Results inbox')}<NgIcon svg={lucideArrowRight} aria-hidden="true" /></UiButton>
       </div>
     </cl-results-preview-sheet>
   );

@@ -49,7 +49,7 @@ export function OrdersComponent() {
                     <td><span className="chip ok">{tx('CDS ผ่าน')}</span></td>
                     <td>
                       <UiButton size="sm" type="button" onClick={() => clinicActions.cosign(rx)}>{tx('เซ็นกำกับ')}</UiButton>
-                      <button type="button" className="link" onClick={() => clinicUi.openSheet('prescription', { id: rx.id })}>{tx('รายละเอียด')}</button>
+                      <button type="button" className="link" onClick={() => { store.selectPet(rx.pet); clinicUi.openSheet('prescription', { id: rx.id }); }}>{tx('รายละเอียด')}</button>
                     </td>
                   </tr>
                 ))}
@@ -67,7 +67,7 @@ export function OrdersComponent() {
             <BoardColumn key={column.name} name={column.name} count={column.list.length}>
               {column.list.map(o => (
                 <TaskCard key={o.id} title={o.pet + ' · ' + tx(o.name)} line1={tx(o.kind) + ' · ' + timeOf(o.time)} line2={o.code}
-                  status={o.priority === 'Urgent' ? { text: 'Urgent', cls: 'danger' } : null} onOpened={() => clinicUi.openSheet('order', { id: o.id })} />
+                  status={o.priority === 'Urgent' ? { text: 'Urgent', cls: 'danger' } : null} onOpened={() => { store.selectPet(o.pet); clinicUi.openSheet('order', { id: o.id }); }} />
               ))}
             </BoardColumn>
           ))}
@@ -100,7 +100,7 @@ export function ResultsComponent() {
             <BoardColumn key={column.name} name={column.name} count={column.list.length}>
               {column.list.map(r => (
                 <TaskCard key={r.id} title={r.pet + ' · ' + tx(r.name)} line1={tx(r.status) + ' · ' + timeOf(r.time)} line2={tx('สั่งโดย') + ' ' + tx(r.by)}
-                  status={r.flag === 'critical' && !r.ack ? { text: 'Critical', cls: 'danger' } : null} onOpened={() => clinicUi.openSheet('result', { id: r.id })} />
+                  status={r.flag === 'critical' && !r.ack ? { text: 'Critical', cls: 'danger' } : null} onOpened={() => { store.selectPet(r.pet); clinicUi.openSheet('result', { id: r.id }); }} />
               ))}
             </BoardColumn>
           ))}
@@ -129,7 +129,7 @@ export function DispenseComponent() {
                 const p = store.patientByPet(rx.pet);
                 return (
                   <TaskCard key={rx.id} title={rx.pet + ' · ' + rx.code} line1={rx.drug} line2={tx(rx.qty) + ' · ' + rx.owner}
-                    onOpened={() => clinicUi.openSheet('prescription', { id: rx.id })}>
+                    onOpened={() => { store.selectPet(rx.pet); clinicUi.openSheet('prescription', { id: rx.id }); }}>
                     {p && p.alerts.length > 0 && <MiniAlerts patient={p} blank />}
                   </TaskCard>
                 );

@@ -3,6 +3,8 @@ import { useMemo } from 'react';
 import { useLanguage } from '../../layout/language.service';
 import { EN } from './en';
 import { EN_EXTRA } from './extra';
+import { EN_REGISTER, TH_REGISTER } from './register';
+import { EN_RAIL, TH_RAIL } from './rail';
 import { TH } from './th';
 
 /*
@@ -22,7 +24,7 @@ export type Lang = 'th' | 'en';
 export type Vars = Record<string, string | number>;
 interface Pattern { re: RegExp; names: string[]; out: string }
 
-const DICTS: Record<Lang, Record<string, string>> = { th: TH, en: { ...EN, ...EN_EXTRA } };
+const DICTS: Record<Lang, Record<string, string>> = { th: { ...TH, ...TH_REGISTER, ...TH_RAIL }, en: { ...EN, ...EN_EXTRA, ...EN_REGISTER, ...EN_RAIL } };
 /** Thai letters and marks (not the baht sign) or Latin letters: anything worth looking up */
 const LETTERS = /[ก-ฺเ-๛A-Za-z]/;
 /** Coarse pieces of a stored string ("จ่ายยาแล้ว · น.สพ. นรินทร์ — พยาน …"), then finer ones */

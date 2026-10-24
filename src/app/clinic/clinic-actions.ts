@@ -4,8 +4,10 @@ import {
   ACK_METHODS, CRITICAL_RULE, drugConflict, FORMULARY, LOCATIONS, NOW, NURSES, ORDER_FLOW, REASON_MIN, RX_DAYS, RX_FREQS, STAGES, stageIndex,
   TRIAGE, VETS,
 } from './data/model';
+import { draftFromRecord, petRecords } from './data/registration';
 import type { AckMethod, AlertType, LabResult, Order, Patient, Prescription, StageKey } from './data/types';
 import { clinicI18n } from './i18n/clinic-i18n';
+import { registrationForm } from './registration-form';
 
 const reasonCheck = (v: string) => (v.trim().length >= REASON_MIN ? null : 'อย่างน้อย {n} ตัวอักษร — ข้อความนี้คือหลักฐานตรวจสอบ');
 
@@ -33,6 +35,16 @@ class ClinicActions {
     clinicUi.closeSheet();
     clinicStore.select(p);
     clinicNavigate('/clinic/encounter');
+  }
+
+  /** The pet's record and its owner's on the registration tab, where the desk keeps them, consent to the data too */
+  openInRegistry(p: Patient) {
+    const record = petRecords(clinicStore.data).find(r => r.patient?.id === p.id);
+    if (record) {
+      registrationForm.load(record, draftFromRecord(clinicStore.data, record));
+    }
+    clinicUi.closeSheet();
+    void clinicNavigate('/clinic/register');
   }
 
   moveStage(p: Patient) {

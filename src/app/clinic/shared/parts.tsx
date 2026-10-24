@@ -18,7 +18,7 @@ export function PetIcon({ kind, size = 'md' }: { kind: PetKind; size?: 'md' | 'l
   const { tx } = useClinicI18n();
   return (
     <cl-pet-icon className="contents">
-      <span role="img" className={cx('pet-fallback', size === 'lg' && 'pet-lg')} aria-label={tx(kind === 'dog' ? 'สุนัข' : 'แมว')}>
+      <span role="img" className={cx('pet-fallback', `sp-${kind}`, size === 'lg' && 'pet-lg')} aria-label={tx(kind === 'dog' ? 'สุนัข' : kind === 'cat' ? 'แมว' : 'อื่นๆ')}>
         <NgIcon svg={PET_ICONS[kind]} aria-hidden="true" />
       </span>
     </cl-pet-icon>

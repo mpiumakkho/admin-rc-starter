@@ -56,6 +56,11 @@ export function AppointmentsComponent() {
   };
 
   const patientOf = (a: Appointment) => a.date === TODAY ? store.data.patients.find(p => p.pet === a.pet && p.ownerKey === a.owner) : undefined;
+  /** An appointment opens with its pet selected, when the pet is in today's clinic, so the context rail is about it */
+  const openAppointment = (a: Appointment) => {
+    store.selectPet(a.pet, a.owner);
+    clinicUi.openSheet('appointment', { id: a.id });
+  };
 
   return (
     <app-clinic-appointments className="workspace">
@@ -93,7 +98,7 @@ export function AppointmentsComponent() {
                   return (
                     <TaskCard key={a.id} title={a.pet + ' · ' + (a.time === '—' ? tx('Waitlist') : a.time)} line1={tx(a.type) + ' · ' + tx(a.provider)} line2={a.owner}
                       status={a.state === 'Confirmed' ? null : { text: a.state, cls: STATE_CHIP[a.state] || 'quiet' }}
-                      onOpened={() => clinicUi.openSheet('appointment', { id: a.id })}>
+                      onOpened={() => openAppointment(a)}>
                       {p && p.alerts.length > 0 && <MiniAlerts patient={p} blank />}
                     </TaskCard>
                   );
@@ -111,7 +116,7 @@ export function AppointmentsComponent() {
                   <span>{day.label}</span><span className="count">{day.list.length}</span>
                 </button>
                 {day.list.map(a => (
-                  <button key={a.id} type="button" className={cx('appt-mini', a.state === 'Completed' && 'done')} onClick={() => clinicUi.openSheet('appointment', { id: a.id })}>
+                  <button key={a.id} type="button" className={cx('appt-mini', a.state === 'Completed' && 'done')} onClick={() => openAppointment(a)}>
                     <b>{a.time === '—' ? tx('Waitlist') : a.time}</b>{` ${a.pet} `}
                     <span className="secondary">{`${tx(a.type)} · ${tx(a.provider)}`}</span>
                   </button>

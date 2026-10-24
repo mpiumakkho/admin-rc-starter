@@ -89,6 +89,7 @@ export {
   Pill as lucidePill,
   Plus as lucidePlus,
   Printer as lucidePrinter,
+  Receipt as lucideReceipt,
   Save as lucideSave,
   ScrollText as lucideScrollText,
   Search as lucideSearch,
