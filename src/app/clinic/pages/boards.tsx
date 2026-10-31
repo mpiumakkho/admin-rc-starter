@@ -44,7 +44,7 @@ export function OrdersComponent() {
                   <tr key={rx.id} className="static">
                     <td><b>{rx.pet}</b><div className="secondary">{rx.owner}</div></td>
                     <td><b>{rx.drug}</b><div className="secondary">{`${tx(rx.dose)} · ${tx(rx.freq)} · ${tx(rx.days)} · ${rx.code}`}</div></td>
-                    <td>{tx(rx.by)}<div className="secondary">{rx.orderedAt}</div></td>
+                    <td>{tx(rx.by)}<div className="secondary">{`${rx.orderedAt}${rx.orderedBy ? ` · ${tx('สั่งโดย')} ${tx(rx.orderedBy)}` : ''}${rx.inpatient ? ` · ${tx('ให้ในวอร์ด')}` : ''}`}</div></td>
                     <td>{tx('{n} นาที', { n: minutesSince(rx.orderedAt ?? '') })}</td>
                     <td><span className="chip ok">{tx('CDS ผ่าน')}</span></td>
                     <td>
@@ -115,7 +115,7 @@ export function DispenseComponent() {
   const store = useClinicStore();
   const { tx } = useClinicI18n();
   const prescriptions = store.data.prescriptions.filter(rx => !rx.verbal);
-  const columns = ['Verify', 'Prepare', 'Counsel', 'Ready'].map(name => ({ name, list: prescriptions.filter(rx => rx.col === name) }));
+  const columns = ['Verify', 'Prepare', 'Counsel', 'Dispensed'].map(name => ({ name, list: prescriptions.filter(rx => rx.col === name) }));
 
   return (
     <app-clinic-dispense className="workspace">

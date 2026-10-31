@@ -16,6 +16,7 @@ export const CLINIC_ROUTES: RouteObject[] = [
       { path: 'orders', lazy: async () => ({ Component: (await import('./pages/boards')).OrdersComponent }) },
       { path: 'results', lazy: async () => ({ Component: (await import('./pages/boards')).ResultsComponent }) },
       { path: 'dispense', lazy: async () => ({ Component: (await import('./pages/boards')).DispenseComponent }) },
+      { path: 'ward', lazy: async () => ({ Component: (await import('./pages/ward')).WardComponent }) },
       { path: '*', ...toQueue },
     ],
   },

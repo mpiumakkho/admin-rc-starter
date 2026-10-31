@@ -1,5 +1,5 @@
 /* The selected patient's sheets: quick view, patient, owner, notes, results, estimate (the design's sheets/index.tsx) */
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 import { lucideArrowRight, lucideCheck, lucideChevronRight, lucideFileText, lucideUserRound } from '../../icons';
 import { cx, NgIcon, UiButton } from '../../user-management/ui';
@@ -23,12 +23,13 @@ export const PATIENT_TABS = [
 ];
 
 /** One clinical alert, as the sheets show it */
-export function SafetyAlert({ alert }: { alert: ClinicalAlert }) {
+export function SafetyAlert({ alert, children }: { alert: ClinicalAlert; children?: ReactNode }) {
   const { tx } = useClinicI18n();
   return (
     <div className={cx('safety', ALERT_META[alert.type].cls === 'warn' && 'warn')}>
       <b><NgIcon svg={ALERT_ICONS[alert.type]} aria-hidden="true" />{tx(alert.label)}</b>
       {alert.detail && <div className="secondary">{tx(alert.detail)}</div>}
+      {children}
     </div>
   );
 }
@@ -142,7 +143,12 @@ export function PatientSheet({ tab = 'overview' }: { tab?: string }) {
           <div className="section">
             <div className="section-title"><h3>{`${tx('Clinical alerts')} (${p.alerts.length})`}</h3></div>
             {p.alerts.map((alert, index) => [
-              <SafetyAlert key={`a${index}`} alert={alert} />,
+              <SafetyAlert key={`a${index}`} alert={alert}>
+                <div className="safety-actions">
+                  <button type="button" className="link" onClick={() => clinicActions.editAlert(p, index)}>{tx('แก้ไข')}</button>
+                  <button type="button" className="link" onClick={() => clinicActions.withdrawAlert(p, index)}>{tx('ยกเลิก alert')}</button>
+                </div>
+              </SafetyAlert>,
               alert.type === 'allergy' && (
                 <div key={`m${index}`} className="secondary alert-meta">
                   {alert.recordedBy && <span>{`${tx('บันทึกโดย')} ${tx(alert.recordedBy)}`}</span>}
@@ -161,6 +167,16 @@ export function PatientSheet({ tab = 'overview' }: { tab?: string }) {
               </div>
             )}
             <p className="secondary">{tx('Alert เหล่านี้แสดงถาวรบน patient banner และในแถวคิว ไม่ถูกซ่อนไว้ใน sheet เท่านั้น')}</p>
+            {!!p.withdrawnAlerts?.length && (
+              <>
+                <div className="section-title"><h3>{tx('Alert ที่ยกเลิกแล้ว')}</h3></div>
+                <div className="timeline">
+                  {p.withdrawnAlerts.map((w, index) => (
+                    <div key={index} className="tl"><b>{tx(w.label)}</b><div className="secondary">{`${w.withdrawnAt} · ${tx(w.withdrawnBy)} · ${w.withdrawnReason}`}</div></div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         );
       case 'overview':
@@ -201,9 +217,10 @@ export function PatientSheet({ tab = 'overview' }: { tab?: string }) {
           <div className="section">
             <div className="section-title"><h3>{tx('Problem list')}</h3></div>
             <div className="kv-list">
-              {p.problems.map(problem => (
-                <RowCard key={problem[0]} name={tx(problem[0])} detail={tx(problem[1])}>
+              {p.problems.map((problem, index) => (
+                <RowCard key={index} name={tx(problem[0])} detail={tx(problem[1])}>
                   <span className={`chip ${problem[2]}`}>{tx(problem[2] === 'ok' ? 'Resolved' : problem[2] === 'danger' ? 'Critical' : 'Active')}</span>
+                  <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.editProblem(p, index)}>{tx('แก้ไข')}</UiButton>
                 </RowCard>
               ))}
               {!p.problems.length && <p className="muted">{tx('ยังไม่มี problem ที่บันทึกไว้')}</p>}
@@ -228,9 +245,26 @@ export function PatientSheet({ tab = 'overview' }: { tab?: string }) {
               {p.vaccines.map(vaccine => (
                 <RowCard key={vaccine[0]} name={vaccine[0]} detail={tx(vaccine[1])}>
                   <span className={`chip ${vaccine[2]}`}>{tx(vaccine[2] === 'ok' ? 'Current' : 'Due')}</span>
+                  {vaccine[2] !== 'ok' && (
+                    <>
+                      <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.remindVaccine(p, vaccine[0], vaccine[1])}>{tx('ส่งเตือน')}</UiButton>
+                      <UiButton size="sm" type="button" onClick={() => clinicActions.recordVaccine(p, vaccine[0])}>{tx('ฉีดวันนี้')}</UiButton>
+                    </>
+                  )}
                 </RowCard>
               ))}
+              {!p.vaccines.length && <p className="muted">{tx('ยังไม่มีประวัติวัคซีน')}</p>}
             </div>
+            {!!p.vaccineLog?.length && (
+              <>
+                <div className="section-title"><h3>{tx('ประวัติการฉีด')}</h3></div>
+                <div className="timeline">
+                  {p.vaccineLog.map((dose, index) => (
+                    <div key={index} className="tl"><b>{`${dose[0]} · ${dose[1]}`}</b><div className="secondary">{`Lot ${dose[2]} · ${tx('ครั้งถัดไป')} ${dose[3]} · ${tx(dose[4])}`}</div></div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         );
       case 'visits': {
@@ -299,6 +333,7 @@ export function PatientSheet({ tab = 'overview' }: { tab?: string }) {
         {/* What the section adds to, then the page that keeps it */}
         {tab === 'alerts' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.addAlert(p)}>{tx('เพิ่ม alert')}</UiButton>}
         {tab === 'problems' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.addProblem(p)}>{tx('เพิ่ม problem')}</UiButton>}
+        {tab === 'vaccines' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.recordVaccine(p)}>{tx('บันทึกการฉีดวัคซีน')}</UiButton>}
         {tab === 'overview' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.recordWeight(p)}>{tx('บันทึกน้ำหนัก')}</UiButton>}
         <span className="grow"></span>
         <UiButton size="sm" type="button" onClick={goHome}>{tx(home?.label ?? 'เปิด Encounter')}<NgIcon svg={lucideArrowRight} aria-hidden="true" /></UiButton>
@@ -400,6 +435,13 @@ export function OwnerSheet({ tab = 'contact' }: { tab?: string }) {
                 <span className={`chip ${consent === 'valid' ? 'ok' : 'danger'}`}>{tx(CONSENT_TEXT[consent])}</span>
               </div>
               <p className="sheet-text">{o.consent === '—' ? tx('ยังไม่ได้ลงนามใบยินยอมการรักษา') : tx(o.consent)}</p>
+              <div className="row-card">
+                <span className="grow">
+                  <b>{`${tx('ใบยินยอมการรักษาของวันนี้')} · ${p.pet}`}</b>
+                  <div className="secondary">{p.consentForm ? tx('ลงนามแล้ว {0} · {1}', { 0: p.consentForm.at, 1: p.consentForm.signer }) : tx('ยังไม่ลงนาม')}</div>
+                </span>
+                <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicUi.openSheet('consent')}>{tx(p.consentForm ? 'ดูใบยินยอม' : 'ลงนามใบยินยอม')}</UiButton>
+              </div>
             </div>
             {section('PDPA', tx(o.pdpa))}
             {section('ประกัน', tx(o.insurance))}
@@ -507,73 +549,5 @@ export function ResultsPreviewSheet() {
         <UiButton size="sm" type="button" onClick={inbox}>{tx('เปิด Results inbox')}<NgIcon svg={lucideArrowRight} aria-hidden="true" /></UiButton>
       </div>
     </cl-results-preview-sheet>
-  );
-}
-
-const ESTIMATE_LINES = [
-  ['Consultation — General', 1, '฿450', '฿450'], ['CBC + Blood chemistry', 1, '฿1,250', '฿1,250'],
-  ['Right hind limb X-ray (2 views)', 1, '฿900', '฿1,200'], ['Carprofen 25 mg', 10, '฿320', '฿320'],
-] as const;
-
-/* ---- The estimate the owner approves before treatment ---- */
-export function EstimateSheet() {
-  const store = useClinicStore();
-  const { tx } = useClinicI18n();
-  const p = store.selected;
-  const o = store.owner(p);
-  const approved = p.handoff.estimate.state === 'done';
-
-  const approve = () => {
-    store.approveEstimate(p);
-    clinicUi.toast('บันทึกการอนุมัติประมาณการแล้ว');
-  };
-
-  const send = () => {
-    clinicActions.sendMessage(p, 'ประมาณการค่าใช้จ่าย',
-      `เรียนคุณ ${o.name}\nประมาณการค่าใช้จ่ายของ ${p.pet} อยู่ที่ ฿2,920 – ฿3,220 (มีอายุ 7 วัน)\nกรุณาตรวจสอบและยืนยันการอนุมัติกับเจ้าหน้าที่`,
-      channel => store.mutate(() => {
-        if (p.handoff.estimate.state !== 'done') {
-          p.handoff.estimate = { state: 'active', note: `ส่งทาง ${channel} แล้ว` };
-        }
-      }));
-  };
-
-  return (
-    <cl-estimate-sheet className="contents">
-      <SheetHead heading={'Estimate · ' + p.pet} status={approved ? { text: 'อนุมัติแล้ว', cls: 'checked' } : { text: 'รออนุมัติ', cls: 'waiting' }}
-        sub={tx('EST-260924-05 · {0} · ต้องอนุมัติก่อนเริ่มหัตถการ', { 0: o.name })} />
-      <div className="sheet-body">
-        <div className="section">
-          <div className="section-title"><h3>{tx('รายการประมาณการ')}</h3></div>
-          <table className="mini-table">
-            <thead>
-              <tr>
-                <th scope="col">{tx('รายการ')}</th><th scope="col" className="num">{tx('จำนวน')}</th><th scope="col" className="num">{tx('ต่ำสุด')}</th>
-                <th scope="col" className="num">{tx('สูงสุด')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ESTIMATE_LINES.map(line => (
-                <tr key={line[0]}><td>{tx(line[0])}</td><td className="num">{line[1]}</td><td className="num">{line[2]}</td><td className="num">{line[3]}</td></tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="summary-line total"><span>{tx('รวม')}</span><span>฿2,920 – ฿3,220</span></div>
-        </div>
-        <div className="section">
-          <div className="section-title"><h3>{tx('เงื่อนไข')}</h3></div>
-          <dl className="data-grid">
-            <dt>{tx('ผู้อนุมัติ')}</dt><dd>{o.name}</dd>
-            <dt>{tx('ช่องทางส่ง')}</dt><dd>{tx(o.prefer)}</dd>
-            <dt>{tx('อายุประมาณการ')}</dt><dd>{tx('7 วัน')}</dd>
-          </dl>
-        </div>
-      </div>
-      <div className="sheet-foot">
-        <UiButton variant="secondary" size="sm" type="button" onClick={send}>{tx('ส่งให้เจ้าของ')}</UiButton>
-        <span className="grow"></span>
-        <UiButton size="sm" type="button" disabled={approved} onClick={approve}>{tx('อนุมัติ')}</UiButton>
-      </div>
-    </cl-estimate-sheet>
   );
 }

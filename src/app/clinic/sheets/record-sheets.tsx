@@ -6,6 +6,7 @@ import { cx, NgIcon, UiButton, UiSegmented } from '../../user-management/ui';
 import { clinicActions } from '../clinic-actions';
 import { clinicUi } from '../clinic-ui';
 import { useClinicStore } from '../clinic.store';
+import { isControlled, isExpired } from '../data/dispense';
 import { ACK_METHODS, isOpenOrder, ORDER_CATALOG, ORDER_FLOW, timeOf } from '../data/model';
 import type { Badge, LabResult } from '../data/types';
 import { clinicI18n, useClinicI18n } from '../i18n/clinic-i18n';
@@ -218,7 +219,7 @@ export function AppointmentSheet({ id }: { id: string }) {
   );
 }
 
-/* ---- One prescription; a vet reads it and co-signs a verbal order, the pharmacy dispenses it ---- */
+/* ---- One prescription; a vet co-signs a verbal order, the pharmacy verifies, prepares and hands it over ---- */
 export function PrescriptionSheet({ id }: { id: string }) {
   const store = useClinicStore();
   const { tx } = useClinicI18n();
@@ -229,7 +230,7 @@ export function PrescriptionSheet({ id }: { id: string }) {
   const draft = rx.verbal && !rx.cosignedBy;
   const status: Badge = draft
     ? { text: 'Verbal · รอเซ็นกำกับ', cls: 'waiting' }
-    : { text: rx.state, cls: rx.state === 'Ready' ? 'checked' : rx.state === 'Verify' ? 'waiting' : 'room' };
+    : { text: rx.state, cls: rx.state === 'Dispensed' ? 'checked' : rx.state === 'Verify' ? 'waiting' : 'room' };
   const profile = (pet: string) => {
     const p = store.patientByPet(pet);
     if (p) {
@@ -241,6 +242,12 @@ export function PrescriptionSheet({ id }: { id: string }) {
     <cl-prescription-sheet className="contents">
       <SheetHead heading={tx('ใบสั่งยา') + ' · ' + rx.code} status={status} sub={rx.pet + ' · ' + rx.owner + ' · ' + tx(draft ? 'รับไว้โดย' : 'สั่งโดย') + ' ' + tx(rx.by)} />
       <div className="sheet-body">
+        {isControlled(rx.drug) && (
+          <div className="safety warn">
+            <b><NgIcon svg={lucideTriangleAlert} aria-hidden="true" />{tx('ยาควบคุม')}</b>
+            <div className="secondary">{tx('จัดยาต้องมีพยานอีกหนึ่งคน และบันทึก batch ลงทะเบียนยาควบคุม')}</div>
+          </div>
+        )}
         {draft && (
           <div className="safety warn">
             <b><NgIcon svg={lucideTriangleAlert} aria-hidden="true" />{tx('คำสั่งวาจา — ยังไม่มีผล')}</b>
@@ -258,16 +265,55 @@ export function PrescriptionSheet({ id }: { id: string }) {
             <dt>{tx('ความถี่')}</dt><dd>{tx(rx.freq)}</dd>
             <dt>{tx('ระยะเวลา')}</dt><dd>{tx(rx.days)}</dd>
             <dt>{tx('จำนวนจ่าย')}</dt><dd>{tx(rx.qty)}</dd>
-            <dt>{tx('คำแนะนำสำหรับเจ้าของ')}</dt><dd>{tx(rx.advice)}</dd>
+            <dt>{tx('คำแนะนำสำหรับเจ้าของ')}</dt><dd>{tx(rx.advice || '—')}</dd>
+            {!!rx.mgPerKg && <><dt>{tx('ขนาดต่อน้ำหนัก')}</dt><dd>{`${rx.mgPerKg} mg/kg`}</dd></>}
+            {rx.inpatient && (
+              <><dt>{tx('ตารางให้ยาของวอร์ด')}</dt><dd>{rx.stoppedAt ? `${tx('หยุดแล้ว')} ${rx.stoppedAt} · ${tx(rx.stoppedBy ?? '')}` : (rx.marTimes ?? []).join(', ')}</dd></>
+            )}
           </dl>
-          <p className="secondary">{tx('ห้องยาเป็นผู้ตรวจสอบและจ่ายยา · สัตวแพทย์ดูได้อย่างเดียว')}</p>
         </div>
+        {rx.cds && (
+          <div className="section">
+            <div className="section-title"><h3>{tx('ผลตรวจ CDS ตอนสั่งยา')}</h3></div>
+            {rx.cds.findings.map((finding, index) => (
+              <div key={index} className={cx('safety', !rx.cds?.override && 'warn')}><div className="secondary">{tx(finding)}</div></div>
+            ))}
+            {rx.cds.override && (
+              <p className="sheet-text">
+                <b>{`${tx('Override')}:`}</b>{` ${rx.cds.override}`}{rx.cds.approvedBy && ` · ${tx('อนุมัติโดย')} ${tx(rx.cds.approvedBy)}`}
+              </p>
+            )}
+          </div>
+        )}
+        {!draft && (
+          <div className="section">
+            <div className="section-title"><h3>{tx('การจ่ายยา')}</h3></div>
+            <dl className="data-grid">
+              <dt>{tx('ตรวจสอบใบสั่งยา')}</dt><dd>{rx.verifiedBy ? `${rx.verifiedAt} · ${tx(rx.verifiedBy)}` : tx('ยังไม่ตรวจสอบ')}</dd>
+              <dt>{tx('จัดยา')}</dt>
+              <dd>
+                {rx.preparedBy ? `${rx.preparedAt} · ${tx(rx.preparedBy)} · batch ${rx.batch ?? '—'}` : tx('ยังไม่จัดยา')}
+                {rx.witness && <div className="secondary">{`${tx('พยาน')} ${tx(rx.witness)}`}</div>}
+              </dd>
+              <dt>{tx('ส่งมอบ')}</dt><dd>{rx.dispensedTo ? `${rx.dispensedAt} · ${rx.dispensedTo} · ${tx(rx.dispensedBy ?? '')}` : tx('ยังไม่ส่งมอบ')}</dd>
+              <dt>{tx('ฉลากยา')}</dt><dd>{rx.labelPrintedAt ? `${tx('พิมพ์แล้ว')} ${rx.labelPrintedAt}` : tx('ยังไม่พิมพ์')}</dd>
+            </dl>
+          </div>
+        )}
         <div className="section">
           <div className="section-title"><h3>{tx('สต็อกตาม batch')}</h3></div>
           <table className="mini-table">
             <thead><tr><th scope="col">Batch</th><th scope="col">{tx('หมดอายุ')}</th><th scope="col">{tx('คงเหลือ')}</th><th scope="col">{tx('ตำแหน่ง')}</th></tr></thead>
             <tbody>
-              {rx.stock.map(batch => <tr key={batch[0]}><td>{batch[0]}</td><td>{batch[1]}</td><td>{tx(batch[2])}</td><td>{tx(batch[3])}</td></tr>)}
+              {rx.stock.map(batch => (
+                <tr key={batch[0]}>
+                  <td>{batch[0]}{batch[0] === rx.batch && <span className="chip ok">{tx('จ่ายจาก batch นี้')}</span>}</td>
+                  <td className={isExpired(batch) ? 'text-danger' : undefined}>
+                    {batch[1]}{isExpired(batch) && <span className="visually-hidden">{` ${tx('หมดอายุแล้ว')}`}</span>}
+                  </td>
+                  <td>{tx(batch[2])}</td><td>{tx(batch[3])}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -282,7 +328,16 @@ export function PrescriptionSheet({ id }: { id: string }) {
       <div className="sheet-foot">
         <UiButton variant="secondary" size="sm" type="button" onClick={() => profile(rx.pet)}>{tx('Patient med profile')}</UiButton>
         <span className="grow"></span>
-        {draft && <UiButton size="sm" type="button" onClick={() => clinicActions.cosign(rx)}>{tx('เซ็นกำกับ')}</UiButton>}
+        {draft ? (
+          <UiButton size="sm" type="button" onClick={() => clinicActions.cosign(rx)}>{tx('เซ็นกำกับ')}</UiButton>
+        ) : (
+          <>
+            {rx.col !== 'Verify' && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.printLabel(rx)}>{tx('พิมพ์ฉลากยา')}</UiButton>}
+            {rx.col === 'Verify' && <UiButton size="sm" type="button" onClick={() => clinicActions.verifyRx(rx)}>{tx('ตรวจสอบใบสั่งยา')}</UiButton>}
+            {rx.col === 'Prepare' && <UiButton size="sm" type="button" onClick={() => clinicActions.prepareRx(rx)}>{tx(rx.inpatient ? 'จัดยาส่งวอร์ด' : 'จัดยา')}</UiButton>}
+            {rx.col === 'Counsel' && <UiButton size="sm" type="button" onClick={() => clinicActions.handOverRx(rx)}>{tx('ให้คำแนะนำและส่งมอบ')}</UiButton>}
+          </>
+        )}
       </div>
     </cl-prescription-sheet>
   );

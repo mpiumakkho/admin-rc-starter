@@ -1,23 +1,26 @@
 import { useState, type ReactNode } from 'react';
 
 import {
-  lucideArrowRight, lucideCheck, lucideChevronRight, lucideCopy, lucideFileText, lucideLock, lucidePenLine, lucidePlus, lucideSparkles,
+  lucideArrowRight, lucideCheck, lucideChevronRight, lucideCopy, lucideFileText, lucideLock, lucidePenLine, lucidePlus, lucideSparkles, lucideTriangleAlert,
 } from '../../icons';
 import { cx, NgIcon, UiButton, UiDialog } from '../../user-management/ui';
 import { clinicActions, clinicNavigate } from '../clinic-actions';
 import { clinicUi } from '../clinic-ui';
 import { useClinicStore } from '../clinic.store';
 import {
-  ENCOUNTER_ORDERS, ENCOUNTER_STEPS, HANDOFF, locOf, OPTIONS, SIGNED_STEPS, STAGES, stageIndex, stageMinutes, suggestTemplate, TEMPLATE_FIELD_LABELS,
+  ENCOUNTER_ORDERS, ENCOUNTER_STEPS, formatDate, HANDOFF, locOf, OPTIONS, SIGNED_STEPS, STAGES, stageIndex, stageMinutes, suggestTemplate, TEMPLATE_FIELD_LABELS,
   TEMPLATES, TRIAGE, type NoteTemplate,
 } from '../data/model';
+import { DISCHARGE_CHANNELS, dischargeChecks, encounterNo, followUpDate, followUpOf, needsFollowUp } from '../data/discharge';
+import { outOfRange, reading, sparkline, STEP_FILL_TEXT, stepFill, VITAL_COLUMNS, vitalsSeries, weightChange } from '../data/record';
+import { inWard } from '../data/ward';
 import type { EncounterNote } from '../data/types';
 import { clinicI18n, useClinicI18n } from '../i18n/clinic-i18n';
 import { PatientBanner } from '../shared/parts';
 import { SafetyAlert } from '../sheets/patient-sheets';
 import './encounter.scss';
 
-type TextField = Exclude<keyof EncounterNote, 'ros' | 'templates' | 'savedAt' | 'status' | 'signedBy' | 'signedAt' | 'closedBy' | 'closedAt'>;
+type TextField = Exclude<keyof EncounterNote, 'ros' | 'templates' | 'savedAt' | 'status' | 'signedBy' | 'signedAt' | 'closedBy' | 'closedAt' | 'followupAt' | 'channel' | 'addenda'>;
 
 /** A list in the AI summary, or a dash when it is empty */
 function SummaryList({ items, translate }: { items: string[]; translate?: (text: string) => string }) {
@@ -84,7 +87,7 @@ export function EncounterComponent() {
     clinicUi.toast('บันทึก Encounter ของ {pet} แล้ว', { pet: p.pet });
   };
 
-  /** Saves, then the next step; from the last one the visit goes on to the pharmacy */
+  /** Saves, then the next step; the last one discharges the pet instead (closeEncounter) */
   const next = () => {
     if (canEdit) {
       store.saveNote(p);
@@ -92,11 +95,30 @@ export function EncounterComponent() {
     if (!last) {
       setStep(s => s + 1);
       clinicUi.toast('บันทึกและไปขั้นตอนถัดไป');
-    } else {
-      void clinicNavigate('/clinic/dispense');
-      clinicUi.toast('ส่งต่อไปยัง Dispense แล้ว');
     }
   };
+
+  /* How far each step is filled in, and the vitals over time (data/record.ts) */
+  const fills = ENCOUNTER_STEPS.map((_, i) => stepFill(store.data, p, n, i));
+  const series = vitalsSeries(p, n);
+  const change = weightChange(series);
+  const weightShift = change !== null && Math.abs(change) > 0.1 ? `${change > 0 ? '+' : ''}${Math.round(change * 100)}` : null;
+  const logVitals = () => {
+    store.logVitals(p);
+    clinicUi.toast('บันทึกชุดสัญญาณชีพของ {pet} แล้ว', { pet: p.pet });
+  };
+
+  /* Discharge step (data/discharge.ts) */
+  const followUp = followUpOf(store.data, n);
+  const checks = dischargeChecks(store.data, p, n);
+  const prefer = store.owner(p).prefer;
+  /** How the papers go: what was picked, else the owner's channel when it is one, else on paper */
+  const channel = n.channel ?? (DISCHARGE_CHANNELS.includes(prefer) ? prefer : 'พิมพ์อย่างเดียว');
+  const setChannel = (value: string) => {
+    n.channel = value;
+    commit();
+  };
+  const longDate = (iso: string) => formatDate(iso, 'long', clinicI18n.lang);
 
   const sendOrders = () => {
     const { sent, skipped } = store.sendEncounterOrders(p, [...picked]);
@@ -169,11 +191,12 @@ export function EncounterComponent() {
     }
   };
 
+  /** The discharge summary to the owner, by the channel picked; the visit is discharged only when it is closed */
   const share = () => {
     const o = store.owner(p);
-    clinicActions.sendMessage(p, 'เอกสารจำหน่าย', `เรียนคุณ ${o.name}\n${p.pet}: ${n.summary || n.dx || '—'}\n${n.home}\n${n.followup}`, () => store.mutate(() => {
-      p.handoff.discharge = { state: 'done', note: 'ส่งเอกสารจำหน่ายแล้ว' };
-    }));
+    const nextVisit = followUp ? clinicI18n.t('นัดติดตาม {0} · {1}', { 0: longDate(followUp.date), 1: followUp.slot }) : clinicI18n.t(n.followup);
+    const warning = n.warning ? `${clinicI18n.t('กลับมาพบสัตวแพทย์ทันทีหาก')} ${n.warning}\n` : '';
+    clinicActions.sendMessage(p, 'เอกสารจำหน่าย', `เรียนคุณ ${o.name}\n${p.pet}: ${n.summary || n.dx || '—'}\n${n.home}\n${warning}${nextVisit}`);
   };
 
   /* Fields bound to the note: typing writes into it, leaving the field saves it */
@@ -218,20 +241,73 @@ export function EncounterComponent() {
         );
       case 1:
         return (
-          <div className="form-12">
-            {line('weight', 'Weight (kg)')}
-            {line('temp', 'Temperature (°C)')}
-            {line('hr', 'Heart rate')}
-            {line('rr', 'Respiratory rate')}
-            {line('mm', 'Mucous membrane / CRT')}
-            {choice('bcs', 'Body condition score', OPTIONS.bcs)}
-            <div className="field full">
-              <label htmlFor="enc-pain">{`${tx('Pain score (0–10)')}: `}<b>{n.pain}</b></label>
-              {/* Dragging writes into the note; letting go saves it (the input's change event) */}
-              <input id="enc-pain" className="pain-range" type="range" min="0" max="10" value={n.pain} onChange={event => write('pain', event.target.value)}
-                ref={element => { if (element) { element.onchange = commit; } }} />
+          <>
+            <div className="form-12">
+              {line('weight', 'Weight (kg)')}
+              {line('temp', 'Temperature (°C)')}
+              {line('hr', 'Heart rate')}
+              {line('rr', 'Respiratory rate')}
+              {line('mm', 'Mucous membrane / CRT')}
+              {choice('bcs', 'Body condition score', OPTIONS.bcs)}
+              <div className="field full">
+                <label htmlFor="enc-pain">{`${tx('Pain score (0–10)')}: `}<b>{n.pain}</b></label>
+                {/* Dragging writes into the note; letting go saves it (the input's change event) */}
+                <input id="enc-pain" className="pain-range" type="range" min="0" max="10" value={n.pain} onChange={event => write('pain', event.target.value)}
+                  ref={element => { if (element) { element.onchange = commit; } }} />
+              </div>
             </div>
-          </div>
+            {!!series.length && (
+              <div className="vitals-trend">
+                <div className="section-title"><h3>{tx('แนวโน้มสัญญาณชีพ')}</h3><span className="secondary">{tx('{n} ครั้ง', { n: series.length })}</span></div>
+                <div className="table-wrap">
+                  <table className="mini-table vitals-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">{tx('เวลา')}</th>
+                        {VITAL_COLUMNS.map(col => {
+                          const points = sparkline(series.map(v => reading(v[col.key])));
+                          return (
+                            <th key={col.key} scope="col" className="num">
+                              <span>{tx(col.label)}</span>
+                              {points && (
+                                <svg className="spark" viewBox="0 0 64 20" aria-hidden="true">
+                                  <polyline points={points.map(pt => `${pt[0]},${pt[1]}`).join(' ')} />
+                                  {points.map((pt, index) => (
+                                    <circle key={pt[2]} cx={pt[0]} cy={pt[1]} r={index === points.length - 1 ? 3 : 2}><title>{`${series[pt[2]].at} · ${series[pt[2]][col.key]}`}</title></circle>
+                                  ))}
+                                </svg>
+                              )}
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {series.map(v => (
+                        <tr key={v.at}>
+                          <td>{v.at}</td>
+                          {VITAL_COLUMNS.map(col => {
+                            const off = col.ranged && outOfRange(p, col.key as 'temp' | 'hr' | 'rr', v[col.key]);
+                            return (
+                              <td key={col.key} className={cx('num', off && 'text-danger')}>
+                                {v[col.key] || '—'}{off && <span className="visually-hidden">{` ${tx('นอกช่วงปกติ')}`}</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {weightShift && (
+                  <div className="safety warn"><b><NgIcon svg={lucideTriangleAlert} aria-hidden="true" />{tx('น้ำหนักเปลี่ยน {0}% จากครั้งก่อน — ตรวจสอบอีกครั้ง', { 0: weightShift })}</b></div>
+                )}
+              </div>
+            )}
+            <div className="step-actions">
+              <UiButton variant="secondary" size="sm" type="button" onClick={logVitals}>{tx('บันทึกชุดสัญญาณชีพ')}</UiButton>
+            </div>
+          </>
         );
       case 2:
         return (
@@ -314,6 +390,16 @@ export function EncounterComponent() {
               <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicUi.openSheet('estimate')}>
                 {tx('Estimate')}<NgIcon svg={lucideChevronRight} aria-hidden="true" />
               </UiButton>
+              <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicUi.openSheet('consent')}>
+                {tx('ใบยินยอม')}<NgIcon svg={lucideChevronRight} aria-hidden="true" />
+              </UiButton>
+              {inWard(p) ? (
+                <UiButton variant="secondary" size="sm" type="button" onClick={() => void clinicNavigate('/clinic/ward')}>
+                  {tx('ตารางให้ยาของวอร์ด')}<NgIcon svg={lucideChevronRight} aria-hidden="true" />
+                </UiButton>
+              ) : !closed && (
+                <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.admit(p)}>{tx('รับเข้าวอร์ด')}</UiButton>
+              )}
             </div>
           </>
         );
@@ -336,7 +422,8 @@ export function EncounterComponent() {
                       <UiButton size="sm" type="button" onClick={() => clinicActions.cosign(rx)}>{tx('ลงนามกำกับ')}</UiButton>
                     ) : (
                       <>
-                        <span className={`chip ${rx.col === 'Ready' ? 'ok' : 'info'}`}>{tx(rx.state)}</span>
+                        {rx.inpatient && <span className="chip quiet">{tx(rx.stoppedAt ? 'หยุดแล้ว' : 'ให้ในวอร์ด')}</span>}
+                        <span className={`chip ${rx.col === 'Dispensed' ? 'ok' : 'info'}`}>{tx(rx.state)}</span>
                         <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicUi.openSheet('prescription', { id: rx.id })}>{tx('ดูใบสั่งยา')}</UiButton>
                       </>
                     )}
@@ -368,15 +455,37 @@ export function EncounterComponent() {
             <div className="form-12">
               {area('summary', 'Diagnosis summary', true)}
               {area('home', 'Home instructions', true)}
+              {area('warning', 'อาการที่ต้องกลับมาพบสัตวแพทย์ทันที')}
+              {area('restrict', 'อาหารและการจำกัดกิจกรรม')}
               {choice('followup', 'Follow-up', OPTIONS.followup)}
               <div className="field short">
                 <label htmlFor="enc-channel">{tx('ช่องทางส่งเอกสาร')}</label>
-                <select className="ui-input" id="enc-channel"><option>{`${tx(store.owner(p).prefer)} ${tx('+ เอกสารพิมพ์')}`}</option></select>
+                <select className="ui-input" id="enc-channel" value={channel} onChange={event => setChannel(event.target.value)}>
+                  {DISCHARGE_CHANNELS.map(c => <option key={c} value={c}>{tx(c)}</option>)}
+                </select>
               </div>
             </div>
-            <div className="step-actions">
-              <UiButton variant="secondary" size="sm" type="button" onClick={share}>{tx('แชร์พร้อมไฟล์แนบ')}<NgIcon svg={lucideChevronRight} aria-hidden="true" /></UiButton>
-            </div>
+            {needsFollowUp(n.followup) && (
+              <div className="row-card followup">
+                {followUp ? (
+                  <>
+                    <span className="grow">
+                      <b>{tx('นัดติดตาม {0} · {1}', { 0: longDate(followUp.date), 1: followUp.slot })}</b>
+                      <div className="secondary">{`${tx(followUp.provider)} · ${tx(followUp.room)} · ${followUp.id}`}</div>
+                    </span>
+                    <span className="chip ok">{tx('จองแล้ว')}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="grow">
+                      <b>{tx('ยังไม่ได้จองนัดติดตาม')}</b>
+                      <div className="secondary">{tx('ตามแผน: {0} · {1}', { 0: tx(n.followup), 1: longDate(followUpDate(n.followup)) })}</div>
+                    </span>
+                    <UiButton size="sm" type="button" onClick={() => clinicActions.bookFollowUp(p)}>{tx('จองนัด')}</UiButton>
+                  </>
+                )}
+              </div>
+            )}
           </>
         );
     }
@@ -392,11 +501,11 @@ export function EncounterComponent() {
         {/* The note, step by step */}
         <nav className="step-rail" aria-label={tx('ขั้นตอนการบันทึก')}>
           {ENCOUNTER_STEPS.map((label, i) => (
-            <button key={label} type="button" className={cx('step-btn', i === step && 'active')} aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)}>
+            <button key={label} type="button" className={cx('step-btn', i === step && 'active', fills[i] === 'done' && 'done')} aria-current={i === step ? 'step' : undefined} onClick={() => setStep(i)}>
               <span className="step-no">{i + 1}</span>
               <span className="step-text">
                 <span className="step-label">{tx(label)}</span>
-                <span className="secondary">{tx(i < step ? 'Complete' : i === step ? 'In progress' : 'Not started')}</span>
+                <span className="secondary">{tx(i === step ? 'In progress' : STEP_FILL_TEXT[fills[i]])}</span>
               </span>
             </button>
           ))}
@@ -407,7 +516,7 @@ export function EncounterComponent() {
             <div>
               <h1 id="encounter-step-title">{tx(ENCOUNTER_STEPS[step])}</h1>
               <div className="secondary">
-                {` ${tx('Encounter E-260924-05 ·')} ${tx(where.location)} · ${tx(p.vet)} ${tx('· ขั้นตอน')} ${tx(where.stage)} (${where.minutes} ${tx('น.)')} `}
+                {` ${tx('Encounter')} ${encounterNo(p)} · ${tx(where.location)} · ${tx(p.vet)} ${tx('· ขั้นตอน')} ${tx(where.stage)} (${where.minutes} ${tx('น.)')} `}
                 {n.savedAt && ` ${tx('· บันทึกล่าสุด')} ${tx(n.savedAt)} `}
               </div>
             </div>
@@ -441,12 +550,55 @@ export function EncounterComponent() {
               <NgIcon svg={lucideLock} aria-hidden="true" />{`${tx('ลงนาม SOAP แล้ว ·')} ${tx(n.signedBy ?? '')} ${n.signedAt} ${tx('— S/O/A/P ถูกล็อก การแก้ไขภายหลังต้องทำเป็น addendum')}`}
             </div>
           )}
+          {signed && (step === 2 || step === 3) && (
+            <div className="addenda">
+              {(n.addenda ?? []).map((x, index) => (
+                <div key={index} className="addendum"><b>{`${tx('Addendum')} · ${x[0]} · ${tx(x[1])}`}</b><p>{x[2]}</p></div>
+              ))}
+              <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.addAddendum(p)}>
+                <NgIcon svg={lucidePlus} aria-hidden="true" />{tx('เพิ่ม addendum')}
+              </UiButton>
+            </div>
+          )}
 
           <div className="form-panel">
             {/* A new fieldset for each step, so it fades in where the last one was */}
             <fieldset key={step} className="plain ui-enter-fade" disabled={!canEdit}>
               {stepBody()}
             </fieldset>
+            {last && (
+              <div className="discharge-panel">
+                <div className="section-title"><h3>{tx('ยากลับบ้าน')}</h3></div>
+                <div className="kv-list">
+                  {prescriptions.map(rx => (
+                    <div key={rx.id} className="row-card">
+                      <span className="grow"><b>{rx.drug}</b><div className="secondary">{`${tx(rx.dose)} · ${tx(rx.freq)} · ${tx(rx.days)} · ${tx(rx.qty)}`}</div></span>
+                      <span className={`chip ${rx.col === 'Dispensed' ? 'ok' : 'warn'}`}>{tx(rx.col === 'Dispensed' ? 'ส่งมอบแล้ว' : 'ยังไม่ส่งมอบ')}</span>
+                    </div>
+                  ))}
+                  {!prescriptions.length && <p className="muted">{tx('ไม่มียากลับบ้าน')}</p>}
+                </div>
+                <div className="section-title"><h3>{tx('ก่อนจำหน่าย')}</h3></div>
+                <ul className="discharge-checks">
+                  {checks.map(c => (
+                    <li key={c.label} className={cx(c.ok && 'ok', !c.ok && c.required && 'req')}>
+                      <NgIcon svg={c.ok ? lucideCheck : lucideTriangleAlert} aria-hidden="true" />
+                      <span>{tx(c.label)}</span>
+                      {!c.ok && <span className="visually-hidden">{tx(c.required ? 'ต้องทำก่อนจำหน่าย' : 'ยังไม่ครบ')}</span>}
+                    </li>
+                  ))}
+                </ul>
+                <div className="step-actions">
+                  <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.printDischarge(p)}>{tx('พิมพ์สรุปการจำหน่าย')}</UiButton>
+                  <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.printCertificate(p)}>{tx('พิมพ์ใบรับรองแพทย์')}</UiButton>
+                  {channel !== 'พิมพ์อย่างเดียว' && (
+                    <UiButton variant="secondary" size="sm" type="button" onClick={share}>
+                      {tx('ส่งให้เจ้าของทาง {0}', { 0: tx(channel) })}<NgIcon svg={lucideChevronRight} aria-hidden="true" />
+                    </UiButton>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </section>
       </div>
@@ -470,9 +622,16 @@ export function EncounterComponent() {
           })}
         </ol>
         <UiButton variant="secondary" size="sm" type="button" disabled={!canEdit} onClick={save}>{tx('Save')}</UiButton>
-        <UiButton size="sm" type="button" disabled={!canEdit && !last} onClick={next}>
-          {` ${tx(last ? 'ส่งต่อ Dispense' : 'Complete step')}`}<NgIcon svg={lucideArrowRight} aria-hidden="true" />
-        </UiButton>
+        {last ? (
+          <UiButton size="sm" type="button" disabled={closed || !signed} onClick={() => clinicActions.closeEncounter(p)}
+            title={tx(closed ? 'ปิด encounter แล้ว' : signed ? 'ปิด encounter ส่งกลับบ้าน และออกใบแจ้งหนี้' : 'ต้องลงนาม SOAP ก่อน')}>
+            {` ${tx(closed ? 'จำหน่ายแล้ว' : 'จำหน่าย')}`}<NgIcon svg={lucideArrowRight} aria-hidden="true" />
+          </UiButton>
+        ) : (
+          <UiButton size="sm" type="button" disabled={!canEdit} onClick={next}>
+            {` ${tx('Complete step')}`}<NgIcon svg={lucideArrowRight} aria-hidden="true" />
+          </UiButton>
+        )}
       </div>
 
       {/* Templates: S/O/A/P, plan and discharge text for common visits; the one that fits the visit is suggested */}

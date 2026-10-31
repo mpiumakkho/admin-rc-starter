@@ -199,6 +199,8 @@ export function BillingSheet() {
   const owed = outstanding(store.data, p.ownerKey);
   const credit = o.credit ?? 0;
   const bill = runningBill(store.data, p);
+  // The invoice issued when the selected pet was discharged today
+  const issued = p.invoiceId ? store.data.invoices.find(i => i.id === p.invoiceId) : undefined;
 
   const remind = () => {
     const list = open.map(i => `${i.no} · ${i.date} · ${i.pet} · ${baht(balanceOf(i))}`).join('\n');
@@ -235,6 +237,10 @@ export function BillingSheet() {
                     {i.items.map(([name, amount], index) => <tr key={index}><td>{tx(name)}</td><td className="num">{baht(amount)}</td></tr>)}
                   </tbody>
                 </table>
+                <div className="invoice-actions">
+                  {!!i.paid && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.printReceipt(i)}>{tx('พิมพ์ใบเสร็จ')}</UiButton>}
+                  <UiButton size="sm" type="button" onClick={() => clinicActions.pay(i)}>{tx('รับชำระ')}</UiButton>
+                </div>
               </details>
             ))}
             {!open.length && <p className="muted">{tx('ไม่มีใบแจ้งหนี้ค้างชำระ')}</p>}
@@ -252,7 +258,14 @@ export function BillingSheet() {
                 </tbody>
               </table>
               <div className="summary-line total"><span>{tx('รวมโดยประมาณ')}</span><span>{baht(bill.total)}</span></div>
-              <p className="muted">{tx('ยังไม่ออกใบแจ้งหนี้ · คิดจากคำสั่งตรวจวันนี้ ช่วงราคาคิดที่ราคาต่ำสุด')}</p>
+              {issued ? (
+                <>
+                  <p className="muted">{tx('ออกใบแจ้งหนี้ {0} แล้วตอนจำหน่าย · {1}', { 0: issued.no, 1: tx(invoiceState(issued)) })}</p>
+                  {!!issued.paid && <UiButton variant="secondary" size="sm" type="button" onClick={() => clinicActions.printReceipt(issued)}>{tx('พิมพ์ใบเสร็จ')}</UiButton>}
+                </>
+              ) : (
+                <p className="muted">{tx('ยังไม่ออกใบแจ้งหนี้ · คิดจากคำสั่งตรวจวันนี้ ช่วงราคาคิดที่ราคาต่ำสุด')}</p>
+              )}
             </>
           ) : (
             <p className="muted">{tx('ยังไม่มีค่าใช้จ่ายใน visit วันนี้')}</p>
