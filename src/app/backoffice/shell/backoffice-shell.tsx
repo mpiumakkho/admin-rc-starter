@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import {
   lucideAArrowDown, lucideAArrowUp, lucideAccessibility, lucideArrowLeft, lucideBell, lucideChevronRight, lucideDatabaseBackup, lucideLogOut, lucideMenu,
@@ -14,6 +14,7 @@ import {
   announce, cx, NgIcon, uiConfirm, useUiAccessibleView, useUiScale, useUiTheme, UiAvatar, UiMenu, UiMenuDivider, UiMenuItem, UiMenuItemCheckbox,
   UiMenuTrigger, UiTooltip, type UiConnectedPosition,
 } from '../../user-management/ui';
+import { setBackofficeNavigate } from '../backoffice-actions';
 import { backofficeUi } from '../backoffice-ui';
 import { backofficeStore, useBackofficeStore } from '../backoffice.store';
 import { boI18n, useBoI18n } from '../i18n/bo-i18n';
@@ -50,7 +51,13 @@ export function BackofficeShellComponent() {
   const language = useLanguage(state => state.current);
   const session = useSession();
   const location = useLocation();
+  const navigate = useNavigate();
   const main = useRef<HTMLElement>(null);
+
+  // The actions move between the workspace's pages with the router
+  useLayoutEffect(() => {
+    setBackofficeNavigate(path => navigate(path));
+  }, [navigate]);
 
   /** The menu, on narrow screens: open over the page */
   const [menuOpen, setMenuOpen] = useState(false);

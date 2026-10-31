@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { useLanguage } from '../../layout/language.service';
 import { EN_BO } from './en';
+import { EN_FINANCE, TH_FINANCE } from './finance';
 import { TH_BO } from './th';
 
 /*
@@ -19,8 +20,8 @@ export type Vars = Record<string, string | number>;
 interface Pattern { re: RegExp; names: string[]; out: string }
 
 const DICTS: Record<Lang, Record<string, string>> = {
-  th: { ...TH_BO },
-  en: { ...EN_BO },
+  th: { ...TH_BO, ...TH_FINANCE },
+  en: { ...EN_BO, ...EN_FINANCE },
 };
 /** Thai letters and marks (not the baht sign) or Latin letters: anything worth looking up */
 const LETTERS = /[ก-ฺเ-๛A-Za-z]/;
