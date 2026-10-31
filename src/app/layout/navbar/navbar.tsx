@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router';
 
 import {
   lucideAArrowDown, lucideAArrowUp, lucideAccessibility, lucideActivity, lucideBell, lucideBlocks, lucideHistory, lucideLogOut, lucideMenu, lucideMoon,
-  lucidePanelLeft, lucideSearch, lucideShieldCheck, lucideStethoscope, lucideSun, lucideUser, lucideX,
+  lucidePanelLeft, lucideSearch, lucideShieldCheck, lucideBriefcase, lucideStethoscope, lucideSun, lucideUser, lucideX,
 } from '../../icons';
 import { session as sessionService, useSession } from '../../user-management/access/session';
 import { ActivityDialog } from '../../user-management/activity/activity-dialog';
@@ -377,6 +377,7 @@ export function Navbar() {
                     <UiMenuItemCheckbox icon={lucideAccessibility} checked={accessibleView.on} onTriggered={accessibleView.toggle}>{t('Accessible view')}</UiMenuItemCheckbox>
                     <UiMenuItem icon={lucideBlocks} to="/ui-kit">{t('Component gallery')}</UiMenuItem>
                     <UiMenuItem icon={lucideStethoscope} to="/clinic">{t('Clinical work')}</UiMenuItem>
+                    <UiMenuItem icon={lucideBriefcase} to="/backoffice">{t('BackOffice')}</UiMenuItem>
                     <UiMenuDivider />
                     <UiMenuItem tone="danger" icon={lucideLogOut} onTriggered={() => void sessionService.signOut()}>{t('Sign Out')}</UiMenuItem>
                   </UiMenu>

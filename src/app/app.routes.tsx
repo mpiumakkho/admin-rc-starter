@@ -1,6 +1,7 @@
 import { redirect, type RouteObject } from 'react-router';
 
 import { App } from './app';
+import { BACKOFFICE_ROUTES } from './backoffice/backoffice.routes';
 import { CLINIC_ROUTES } from './clinic/clinic.routes';
 import { BootFrame } from './layout/boot-frame';
 import { guard, lazyPage, signedIn, signedOut } from './user-management/access/guards';
@@ -21,6 +22,8 @@ export const routes: RouteObject[] = [
       { path: 'ui-kit', loader: guard(signedIn), lazy: lazyPage(() => import('./ui-kit/ui-kit'), m => m.UiKitComponent) },
       // A sample clinical workspace (งานตรวจรักษา) in the app's own colors, full page; opened from the account menu
       { path: 'clinic', loader: guard(signedIn), children: CLINIC_ROUTES },
+      // A sample back office (seph1-docs 26-backoffice-erp): the hospital's administration, full page, from the account menu too
+      { path: 'backoffice', loader: guard(signedIn), children: BACKOFFICE_ROUTES },
       { path: 'login', loader: guard(signedOut), lazy: lazyPage(() => import('./auth/login/login'), m => m.LoginComponent) },
       { path: 'forgot-password', loader: guard(signedOut), lazy: lazyPage(() => import('./auth/forgot-password/forgot-password'), m => m.ForgotPasswordComponent) },
       // Where the links in emails lead (API.md, "Links in emails"); they work whether or not someone is signed in here
