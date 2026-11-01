@@ -9,12 +9,18 @@ import {
   renewDateProblem, retireImpact, testedProblem,
 } from './data/assets';
 import { DISCOUNT_THRESHOLD, methodOf, PAYMENT_METHODS, refundable, REFUND_THRESHOLD, statusOf } from './data/finance';
+import {
+  ANONYMOUS, approveBlock, CATCH_POINT, CHANNEL, CHANNELS, closeBlock, complainantOf, COMPLAINT_CATEGORY, COMPLAINT_SEVERITY, type ComplaintInput, escalateBlock, HANDLERS, HARM,
+  HARM_LEVELS, type IncidentInput, linkProblems, MM_OUTCOME, mmBlock, type MmInput, moment, type NearMissInput, RCA_STATUS, REGULATORS, REMEDY, resolveBlock, responseBlock, responseDue,
+  responseRate, SAFETY_CATEGORY, satisfactionBlock, SEVERITIES, signOffBlock, submitProblems, surveyBlock, targetProblem, TRIAGE_HOURS, triageHours, type TriageInput, WHY_MIN,
+} from './data/quality';
 import { APPROVAL_KIND, canDecide } from './data/home';
 import { canResolve, INVESTIGATION, type LedgerDispenseInput, RECALL_NEXT, RECALL_SEVERITY, RECALL_STATUS, type ReceiptInput, type WasteInput, wasteReason } from './data/inventory';
 import { CLAIM_KIND, CLAIM_STATUS, type ClaimInput, linkOf, MESSAGE_KIND, type OutboxItem, policyOf, PURPOSE_LABEL } from './data/sales';
 import type {
-  AccountingExport, Approval, BoException, CalibrationRecord, CeRecord, Claim, CountRecord, Criticality, Decommission, Downtime, Equipment, LeaveRequest, License, OnCallSlot, PmTask,
-  Privilege, Recall, RecallStatus, ServiceContract, Shift, StaffMember, StockReceipt,
+  AccountingExport, Approval, BoException, CalibrationRecord, CatchPoint, CeRecord, Claim, Complaint, ComplaintChannel, ComplaintSeverity, CountRecord, Criticality, Decommission, Downtime,
+  Equipment, HarmLevel, Incident, KpiDefinition, LeaveRequest, License, MmReview, NearMiss, OnCallSlot, PmTask, Privilege, Rca, RcaAction, Recall, RecallStatus, Remedy, SafetyCategory,
+  SafetySurvey, ServiceContract, Shift, StaffMember, StockReceipt,
 } from './data/types';
 import {
   canVerify, catalogCourse, CE_STATUS, type CeInput, ceReviewBlock, coverage, daysOf, DEPARTMENTS, EMPLOYMENT, fairness, gaps, LEAVE_STATUS, LEAVE_TYPE, leaveBlock, leaveDays, leaveImpact,
@@ -41,6 +47,8 @@ export function backofficeNavigate(path: string): Promise<void> {
 /** A reason that will stand as evidence */
 export const REASON_MIN = 10;
 const reasonCheck = (v: string) => (v.trim().length >= REASON_MIN ? null : 'อย่างน้อย {n} ตัวอักษร — ข้อความนี้คือหลักฐานตรวจสอบ');
+/** An RCA team typed as names apart by commas */
+const teamOf = (v: string) => v.split(',').map(x => x.trim()).filter(x => x.length >= 2);
 
 /** What the home pages' buttons do: each asks, changes the store, then says what happened */
 class BackofficeActions {
@@ -1086,6 +1094,444 @@ class BackofficeActions {
       onConfirm: v => {
         backofficeStore.completeDecommission(r, v['evidence']);
         backofficeUi.toast('{name} เลิกใช้แล้ว · {id}', { name: boI18n.t(e.name), id: r.id }, 'info');
+      },
+    });
+  }
+
+  /* Quality and patient safety (M12) */
+
+  reportIncident(input: IncidentInput, onDone?: (i: Incident) => void) {
+    const harm = Number(input.harm) as HarmLevel;
+    backofficeUi.ask({
+      title: `แจ้งอุบัติการณ์ · ${boI18n.t(SAFETY_CATEGORY[input.category as SafetyCategory])}`,
+      tone: harm >= 4 ? 'danger' : 'primary',
+      facts: [['เกิดเมื่อ', moment(input.at)], ['สถานที่', input.location], ['ระดับอันตราย', HARM[harm].label], ['ผู้รายงาน', input.anonymous ? ANONYMOUS : backofficeStore.userName]],
+      intro: [input.anonymous ? 'รายงานแบบไม่ระบุตัวตน: ระบบไม่เก็บชื่อผู้รายงานไว้ทั้งในรายงานและบันทึกตรวจสอบ' : 'ชื่อผู้รายงานจะบันทึกไว้กับรายงาน'],
+      warning: harm >= 4 ? boI18n.t('อันตรายระดับรุนแรงขึ้นไป: ต้องคัดกรองภายใน 24 ชม. และต้องทำ RCA ก่อนปิด') : undefined,
+      confirmLabel: 'ส่งรายงาน',
+      onConfirm: () => {
+        const i = backofficeStore.reportIncident(input);
+        backofficeUi.toast('ส่งรายงาน {id} แล้ว · คัดกรองภายใน {h} ชม.', { id: i.id, h: triageHours(i.harm) });
+        onDone?.(i);
+      },
+    });
+  }
+
+  triageIncident(i: Incident, input: TriageInput, onDone?: () => void) {
+    const harm = Number(input.harm) as HarmLevel;
+    backofficeUi.ask({
+      title: `คัดกรอง · ${i.id}`,
+      facts: [['รายงาน', `${HARM[i.harm].label} · ${i.reportedAt}`], ['หลังคัดกรอง', HARM[harm].label], ['ผู้รับผิดชอบ', input.owner.trim()], ['เหตุผล', input.note.trim()]],
+      warning: harm >= 4 && !i.rcaId ? boI18n.t('อันตรายระดับรุนแรงขึ้นไปต้องเปิด RCA ก่อนปิดอุบัติการณ์') : undefined,
+      confirmLabel: 'บันทึกการคัดกรอง',
+      onConfirm: () => {
+        backofficeStore.triageIncident(i, input);
+        backofficeUi.toast('{id} คัดกรองแล้ว · {owner}', { id: i.id, owner: boI18n.t(input.owner.trim()) });
+        onDone?.();
+      },
+    });
+  }
+
+  closeIncident(i: Incident) {
+    const block = closeBlock(backofficeStore.data, i);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `ปิดอุบัติการณ์ · ${i.id}`,
+      facts: [['เหตุการณ์', i.description], ['ระดับอันตราย', HARM[i.harm].label], ...(i.rcaId ? [['RCA', i.rcaId] as [string, string]] : [])],
+      fields: [{
+        name: 'outcome', label: boI18n.t('ผลและสิ่งที่เรียนรู้ (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: 'เช่น ปูแผ่นกันลื่นแล้ว ติดตามไม่มีเหตุซ้ำ',
+        validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+      }],
+      confirmLabel: 'ปิดอุบัติการณ์',
+      onConfirm: v => {
+        backofficeStore.closeIncident(i, v['outcome']);
+        backofficeUi.toast('{id} ปิดแล้ว', { id: i.id });
+      },
+    });
+  }
+
+  /** An RCA opened on an incident, a near miss or a complaint: its team named, never the approver */
+  openRca(source: string, title: string, onDone?: (r: Rca) => void) {
+    backofficeUi.ask({
+      title: `เปิด RCA · ${source}`,
+      facts: [['เรื่อง', title]],
+      intro: [boI18n.t('RCA ต้องถาม "ทำไม" อย่างน้อย {n} ข้อ สรุปสาเหตุราก และมีมาตรการพร้อมผู้รับผิดชอบ ผู้อนุมัติต้องไม่อยู่ในทีม', { n: WHY_MIN })],
+      fields: [
+        { name: 'title', label: 'ชื่อการวิเคราะห์', type: 'input', value: title.slice(0, 60), validate: v => (v.trim().length >= 5 ? null : boI18n.t('อย่างน้อย 5 ตัวอักษร')) },
+        { name: 'team', label: 'ทีมวิเคราะห์ (คั่นด้วย ,)', type: 'input', placeholder: 'เช่น พ.ส. อรุณี, ภก. ธนพร', validate: v => (teamOf(v).length ? null : boI18n.t('ระบุทีมอย่างน้อย 1 คน')) },
+      ],
+      confirmLabel: 'เปิด RCA',
+      onConfirm: v => {
+        const r = backofficeStore.openRca(source, v['title'], teamOf(v['team']));
+        backofficeUi.toast('เปิด {id} แล้ว', { id: r.id });
+        onDone?.(r);
+      },
+    });
+  }
+
+  submitRca(r: Rca) {
+    const problems = submitProblems(r);
+    if (problems.length) {
+      backofficeUi.toast(problems[0], undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `ส่งอนุมัติ · ${r.id}`,
+      facts: [['เรื่อง', r.title], ['ทำไม', String(r.whys.length)], ['สาเหตุราก', r.rootCause], ['มาตรการ', String(r.actions.length)]],
+      intro: ['หลังส่งแล้วแก้คำตอบไม่ได้จนกว่าผู้อนุมัติจะส่งกลับ ผู้อนุมัติต้องไม่ใช่ทีมวิเคราะห์หรือผู้ส่ง'],
+      confirmLabel: 'ส่งอนุมัติ',
+      onConfirm: () => {
+        backofficeStore.submitRca(r);
+        backofficeUi.toast('{id} ส่งอนุมัติแล้ว', { id: r.id });
+      },
+    });
+  }
+
+  decideRca(r: Rca, approve: boolean) {
+    const block = approveBlock(r, backofficeStore.userName);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `${approve ? 'อนุมัติ' : 'ส่งกลับ'} · ${r.id}`,
+      tone: approve ? 'primary' : 'danger',
+      facts: [['เรื่อง', r.title], ['ทีม', r.team.join(', ')], ['ส่งโดย', `${r.submittedBy} · ${r.submittedAt}`], ['สาเหตุราก', r.rootCause]],
+      fields: [{
+        name: 'note', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: approve ? 'เช่น มาตรการครอบคลุม ติดตามตามกำหนด' : 'เช่น ทำไมข้อ 4 ยังเป็นอาการ ไม่ใช่สาเหตุ',
+        validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+      }],
+      confirmLabel: approve ? 'อนุมัติ RCA' : 'ส่งกลับให้ทีมแก้ไข',
+      onConfirm: v => {
+        backofficeStore.decideRca(r, approve, v['note']);
+        backofficeUi.toast('{id} → {status}', { id: r.id, status: boI18n.t(RCA_STATUS[r.status].label) }, approve ? 'success' : 'info');
+      },
+    });
+  }
+
+  completeRcaAction(r: Rca, a: RcaAction) {
+    backofficeUi.ask({
+      title: `มาตรการเสร็จ · ${r.id}`,
+      facts: [['มาตรการ', a.text], ['ผู้รับผิดชอบ', a.owner], ['กำหนด', a.due]],
+      confirmLabel: 'บันทึกว่าเสร็จ',
+      onConfirm: () => {
+        backofficeStore.completeRcaAction(r, a);
+        backofficeUi.toast('บันทึกมาตรการเสร็จแล้ว');
+      },
+    });
+  }
+
+  recordNearMiss(input: NearMissInput, onDone?: (n: NearMiss) => void) {
+    backofficeUi.ask({
+      title: `บันทึกเหตุเกือบพลาด · ${boI18n.t(CATCH_POINT[input.caughtAt as CatchPoint])}`,
+      facts: [['พบเมื่อ', moment(input.at)], ['สถานที่', input.location], ['ผู้ที่จับได้', input.caughtBy.trim()], ['ผู้รายงาน', input.anonymous ? ANONYMOUS : backofficeStore.userName]],
+      intro: [input.anonymous ? 'รายงานแบบไม่ระบุตัวตน: ระบบไม่เก็บชื่อผู้รายงานไว้ทั้งในรายงานและบันทึกตรวจสอบ' : 'ชื่อผู้รายงานจะบันทึกไว้กับรายงาน'],
+      confirmLabel: 'บันทึก',
+      onConfirm: () => {
+        const n = backofficeStore.recordNearMiss(input);
+        backofficeUi.toast('บันทึก {id} แล้ว', { id: n.id });
+        onDone?.(n);
+      },
+    });
+  }
+
+  preventNearMiss(n: NearMiss) {
+    backofficeUi.ask({
+      title: `มาตรการป้องกัน · ${n.id}`,
+      facts: [['เหตุการณ์', n.description], ['จับได้ที่', boI18n.t(CATCH_POINT[n.caughtAt])]],
+      fields: [{
+        name: 'prevention', label: boI18n.t('สิ่งที่ทำเพื่อไม่ให้เกิดซ้ำ (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: 'เช่น แยกชั้นวางยาที่ชื่อคล้ายกันและติดป้ายสี',
+        validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+      }],
+      confirmLabel: 'บันทึกมาตรการ',
+      onConfirm: v => {
+        backofficeStore.preventNearMiss(n, v['prevention']);
+        backofficeUi.toast('{id} มีมาตรการแล้ว', { id: n.id });
+      },
+    });
+  }
+
+  escalateNearMiss(n: NearMiss) {
+    backofficeUi.ask({
+      title: `ยกระดับเป็นอุบัติการณ์ใหม่ · ${n.id}`,
+      tone: 'danger',
+      facts: [['เหตุการณ์', n.description], ['จับได้ที่', boI18n.t(CATCH_POINT[n.caughtAt])]],
+      intro: ['ใช้เมื่อพบภายหลังว่าเหตุถึงตัวผู้ป่วย หรือเกิดซ้ำจนต้องคัดกรองเป็นอุบัติการณ์ อุบัติการณ์ใหม่จะอ้างเลขนี้'],
+      fields: [
+        { name: 'harm', label: 'ระดับอันตราย', type: 'select', value: '1', options: HARM_LEVELS.map(h => ({ value: String(h), label: HARM[h].label })) },
+        {
+          name: 'reason', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: 'เช่น เกิดซ้ำเป็นครั้งที่สามในเดือนนี้',
+          validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        },
+      ],
+      confirmLabel: 'ยกระดับ',
+      onConfirm: v => {
+        const i = backofficeStore.escalateNearMiss(n, Number(v['harm']) as HarmLevel, v['reason']);
+        backofficeUi.toast('เปิด {id} จาก {ref} แล้ว', { id: i.id, ref: n.id }, 'info');
+      },
+    });
+  }
+
+  setKpiTarget(k: KpiDefinition) {
+    backofficeUi.ask({
+      title: `เปลี่ยนเป้าหมาย · ${k.name}`,
+      facts: [['สูตร', k.formula], ['เป้าหมายเดิม', `${k.target} ${boI18n.t(k.unit)}`], ['ทิศทางที่ดี', k.better === 'higher' ? 'ยิ่งสูงยิ่งดี' : 'ยิ่งต่ำยิ่งดี']],
+      fields: [
+        { name: 'target', label: 'เป้าหมายใหม่', type: 'input', validate: v => { const p = targetProblem(k, v); return p ? boI18n.t(p) : null; } },
+        {
+          name: 'reason', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: 'เช่น ปรับตามเกณฑ์ TAHSA ฉบับปี 2026',
+          validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        },
+      ],
+      confirmLabel: 'บันทึกเป้าหมาย',
+      onConfirm: v => {
+        backofficeStore.setKpiTarget(k, Number(v['target']), v['reason']);
+        backofficeUi.toast('{name}: เป้าหมาย {target}', { name: boI18n.t(k.name), target: v['target'].trim() });
+      },
+    });
+  }
+
+  closeSurvey(s: SafetySurvey) {
+    const block = surveyBlock(s);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `ปิดรอบสำรวจ · ${s.round}`,
+      facts: [['ช่วง', `${s.from} → ${s.to}`], ['ตอบแล้ว', `${s.responded}/${s.invited} (${responseRate(s)}%)`]],
+      intro: ['ปิดรอบแล้วรับคำตอบเพิ่มไม่ได้ ผลรอบนี้จะใช้เทียบกับรอบถัดไป'],
+      confirmLabel: 'ปิดรอบสำรวจ',
+      onConfirm: () => {
+        backofficeStore.closeSurvey(s);
+        backofficeUi.toast('ปิดรอบสำรวจ {round} แล้ว', { round: s.round });
+      },
+    });
+  }
+
+  scheduleMm(input: MmInput, onDone?: () => void) {
+    backofficeUi.ask({
+      title: `นัดทบทวน M&M · ${input.pet.trim()}`,
+      facts: [['ผล', MM_OUTCOME[input.outcome].label], ['เกิดเมื่อ', input.eventDate], ['ผู้นำเสนอ', input.presenter.trim()], ['วันประชุม', input.reviewDate]],
+      confirmLabel: 'นัดทบทวน',
+      onConfirm: () => {
+        const m = backofficeStore.scheduleMm(input);
+        backofficeUi.toast('นัด {id} วันที่ {date}', { id: m.id, date: m.reviewDate });
+        onDone?.();
+      },
+    });
+  }
+
+  recordMm(m: MmReview) {
+    const block = mmBlock(m);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `บันทึกผลทบทวน · ${m.id}`,
+      facts: [['ผู้ป่วย', m.pet], ['ผล', MM_OUTCOME[m.outcome].label], ['สรุปเคส', m.summary]],
+      fields: [
+        {
+          name: 'learning', label: boI18n.t('สิ่งที่เรียนรู้ (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: 'เช่น ตรวจค่าการแข็งตัวของเลือดก่อนผ่าตัดทุกราย',
+          validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        },
+        { name: 'attendees', label: 'ผู้เข้าประชุม (คน)', type: 'input', validate: v => (/^\d+$/.test(v.trim()) && Number(v) > 0 ? null : boI18n.t('ใส่จำนวนคนเป็นตัวเลข')) },
+      ],
+      confirmLabel: 'บันทึกผล',
+      onConfirm: v => {
+        backofficeStore.recordMm(m, v['learning'], Number(v['attendees']));
+        backofficeUi.toast('{id} ทบทวนแล้ว', { id: m.id });
+      },
+    });
+  }
+
+  /* Complaints (M28) */
+
+  receiveComplaint(input: ComplaintInput, onDone?: (c: Complaint) => void) {
+    backofficeUi.ask({
+      title: `รับข้อร้องเรียน · ${CHANNEL[input.channel]}`,
+      facts: [['ผู้ร้องเรียน', input.anonymous ? `${ANONYMOUS} (บุคลากร)` : `${input.ownerKey}${input.pet ? ` · ${input.pet}` : ''}`], ['เรื่อง', input.subject.trim()],
+        ['ประเภท', COMPLAINT_CATEGORY[input.category]], ['หัวข้อ', input.topic]],
+      intro: [boI18n.t('คัดกรองความรุนแรงภายใน {n} ชม. หลังรับเรื่อง แล้วนับเวลาตอบกลับตามความรุนแรง', { n: TRIAGE_HOURS })],
+      confirmLabel: 'รับเรื่อง',
+      onConfirm: () => {
+        const c = backofficeStore.receiveComplaint(input);
+        backofficeUi.toast('รับ {id} แล้ว · คัดกรองภายใน {n} ชม.', { id: c.id, n: TRIAGE_HOURS });
+        onDone?.(c);
+      },
+    });
+  }
+
+  triageComplaint(c: Complaint) {
+    backofficeUi.ask({
+      title: `คัดกรอง · ${c.id}`,
+      facts: [['เรื่อง', c.subject], ['ประเภท', COMPLAINT_CATEGORY[c.category]], ['รับเมื่อ', `${c.receivedAt} · ${boI18n.t(CHANNEL[c.channel])}`]],
+      intro: ['ตอบกลับ: รุนแรงภายใน 24 ชม. (ผู้อำนวยการลงนาม) · ปานกลาง 72 ชม. · ต่ำ 7 วัน'],
+      fields: [
+        { name: 'severity', label: 'ความรุนแรง', type: 'select', value: 'moderate', options: SEVERITIES.map(s => ({ value: s, label: COMPLAINT_SEVERITY[s].label })) },
+        { name: 'handler', label: 'ผู้รับผิดชอบ', type: 'select', value: c.category === 'financial' ? 'การเงิน' : 'ผู้จัดการ OPD', options: HANDLERS.map(h => ({ value: h, label: h })) },
+      ],
+      confirmLabel: 'บันทึกการคัดกรอง',
+      onConfirm: v => {
+        backofficeStore.triageComplaint(c, v['severity'] as ComplaintSeverity, v['handler']);
+        backofficeUi.toast('{id} ตอบกลับภายใน {due}', { id: c.id, due: responseDue(c)! });
+      },
+    });
+  }
+
+  logContact(c: Complaint) {
+    backofficeUi.ask({
+      title: `บันทึกการติดต่อ · ${c.id}`,
+      facts: [['ผู้ร้องเรียน', complainantOf(c)], ['เรื่อง', c.subject]],
+      fields: [
+        { name: 'direction', label: 'ทิศทาง', type: 'select', value: 'out', options: [{ value: 'out', label: 'โรงพยาบาลติดต่อผู้ร้องเรียน' }, { value: 'in', label: 'ผู้ร้องเรียนติดต่อมา' }] },
+        { name: 'channel', label: 'ช่องทางรับเรื่อง', type: 'select', value: c.channel, options: CHANNELS.map(ch => ({ value: ch, label: CHANNEL[ch] })) },
+        { name: 'text', label: 'สิ่งที่คุย', type: 'textarea', validate: v => (v.trim().length >= 5 ? null : boI18n.t('อย่างน้อย 5 ตัวอักษร')) },
+      ],
+      confirmLabel: 'บันทึก',
+      onConfirm: v => {
+        backofficeStore.logContact(c, v['direction'] as 'in' | 'out', v['channel'] as ComplaintChannel, v['text']);
+        backofficeUi.toast('บันทึกการติดต่อแล้ว');
+      },
+    });
+  }
+
+  recordFindings(c: Complaint) {
+    const linksOf = (v: string) => v.split(/[,\s]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+    backofficeUi.ask({
+      title: `ผลสอบสวน · ${c.id}`,
+      facts: [['เรื่อง', c.subject], ['ผู้รับผิดชอบ', c.handler ?? '—'], ...(c.links.length ? [['อ้างอิง', c.links.join(', ')] as [string, string]] : [])],
+      fields: [
+        {
+          name: 'findings', label: boI18n.t('สิ่งที่พบ (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', value: c.findings ?? '',
+          validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        },
+        {
+          name: 'links', label: 'อ้างอิงเหตุเกือบพลาด อุบัติการณ์ หรือ RCA (ถ้ามี)', type: 'input', optional: true, placeholder: 'เช่น NM-2609-003',
+          validate: v => { const p = linkProblems(backofficeStore.data, linksOf(v)); return p ? boI18n.t(p) : null; },
+        },
+      ],
+      confirmLabel: 'บันทึกผลสอบสวน',
+      onConfirm: v => {
+        backofficeStore.recordFindings(c, v['findings'], linksOf(v['links']));
+        backofficeUi.toast('บันทึกผลสอบสวน {id} แล้ว', { id: c.id });
+      },
+    });
+  }
+
+  respond(c: Complaint) {
+    const block = responseBlock(c);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    const severe = c.severity === 'severe';
+    backofficeUi.ask({
+      title: `${severe ? 'ร่างคำตอบ' : 'ตอบกลับ'} · ${c.id}`,
+      facts: [['ถึง', `${complainantOf(c)} · ${boI18n.t(CHANNEL[c.channel])}`], ['ตอบภายใน', responseDue(c) ?? '—'], ['ผลสอบสวน', c.findings ?? '—']],
+      intro: [severe ? 'ข้อร้องเรียนรุนแรง: คำตอบจะรอผู้อำนวยการลงนามก่อนส่ง ผู้ร่างลงนามเองไม่ได้' : 'คำตอบจะส่งทางช่องทางเดิมและบันทึกในประวัติการติดต่อ'],
+      fields: [{ name: 'text', label: 'คำตอบ', type: 'textarea', validate: v => (v.trim().length >= 20 ? null : boI18n.t('คำตอบอย่างน้อย 20 ตัวอักษร')) }],
+      confirmLabel: severe ? 'ส่งให้ผู้อำนวยการลงนาม' : 'ส่งคำตอบ',
+      onConfirm: v => {
+        backofficeStore.respond(c, v['text']);
+        backofficeUi.toast(severe ? '{id} รอผู้อำนวยการลงนาม' : 'ส่งคำตอบ {id} แล้ว', { id: c.id });
+      },
+    });
+  }
+
+  signOff(c: Complaint, approve: boolean) {
+    const block = signOffBlock(c, backofficeStore.userName);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `${approve ? 'ลงนามคำตอบ' : 'ส่งคำตอบกลับไปแก้'} · ${c.id}`,
+      tone: approve ? 'primary' : 'danger',
+      facts: [['ร่างโดย', `${c.response!.draftedBy} · ${c.response!.draftedAt}`], ['คำตอบ', c.response!.text], ['ตอบภายใน', responseDue(c)!]],
+      fields: [{
+        name: 'note', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: approve ? 'เช่น คำตอบครบถ้วน ส่งได้' : 'เช่น ต้องแจ้งมาตรการที่ห้องยาให้ชัดกว่านี้',
+        validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+      }],
+      confirmLabel: approve ? 'ลงนามและส่ง' : 'ส่งกลับไปแก้',
+      onConfirm: v => {
+        backofficeStore.signOff(c, approve, v['note']);
+        backofficeUi.toast(approve ? 'ส่งคำตอบ {id} แล้ว' : '{id} ส่งกลับไปแก้', { id: c.id }, approve ? 'success' : 'info');
+      },
+    });
+  }
+
+  resolveComplaint(c: Complaint) {
+    const block = resolveBlock(c);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `ปิดเรื่องร้องเรียน · ${c.id}`,
+      facts: [['เรื่อง', c.subject], ['ตอบเมื่อ', c.response!.sentAt!]],
+      fields: [
+        { name: 'remedy', label: 'การเยียวยา', type: 'select', value: 'apology', options: (Object.keys(REMEDY) as Remedy[]).map(r => ({ value: r, label: REMEDY[r] })) },
+        {
+          name: 'outcome', label: boI18n.t('ผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', placeholder: 'เช่น เจ้าของรับคำชี้แจง ปรับขั้นตอนแจ้งเวลารอแล้ว',
+          validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        },
+      ],
+      confirmLabel: 'ปิดเรื่องร้องเรียน',
+      onConfirm: v => {
+        backofficeStore.resolveComplaint(c, v['outcome'], v['remedy'] as Remedy);
+        backofficeUi.toast('{id} แก้ไขแล้ว', { id: c.id });
+      },
+    });
+  }
+
+  recordSatisfaction(c: Complaint) {
+    const block = satisfactionBlock(c);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `ความพึงพอใจ · ${c.id}`,
+      facts: [['ผู้ร้องเรียน', complainantOf(c)], ['การเยียวยา', REMEDY[c.resolution!.remedy]]],
+      fields: [
+        { name: 'score', label: 'คะแนน (1–5)', type: 'select', value: '4', options: [5, 4, 3, 2, 1].map(n => ({ value: String(n), label: `${n}` })) },
+        { name: 'note', label: 'ความเห็น', type: 'textarea', optional: true },
+      ],
+      confirmLabel: 'บันทึก',
+      onConfirm: v => {
+        backofficeStore.recordSatisfaction(c, Number(v['score']), v['note']);
+        backofficeUi.toast('บันทึกความพึงพอใจ {id} แล้ว', { id: c.id });
+      },
+    });
+  }
+
+  escalateComplaint(c: Complaint) {
+    const block = escalateBlock(c);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `ส่งหน่วยงานกำกับ · ${c.id}`,
+      tone: 'danger',
+      facts: [['เรื่อง', c.subject], ['ความรุนแรง', COMPLAINT_SEVERITY[c.severity!].label]],
+      intro: ['ใช้เมื่อผู้ร้องเรียนแจ้งว่าจะร้องต่อหน่วยงาน หรือกฎหมายกำหนดให้แจ้ง การส่งจริงทำนอกระบบ ที่นี่บันทึกว่าส่งเมื่อไรและเพราะอะไร'],
+      fields: [
+        { name: 'body', label: 'หน่วยงาน', type: 'select', value: REGULATORS[0], options: REGULATORS.map(r => ({ value: r, label: r })) },
+        {
+          name: 'reason', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea',
+          validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        },
+      ],
+      confirmLabel: 'บันทึกการแจ้งหน่วยงาน',
+      onConfirm: v => {
+        backofficeStore.escalateComplaint(c, v['body'], v['reason']);
+        backofficeUi.toast('บันทึกการส่ง {id} ถึง{body}แล้ว', { id: c.id, body: boI18n.t(v['body']) }, 'info');
       },
     });
   }

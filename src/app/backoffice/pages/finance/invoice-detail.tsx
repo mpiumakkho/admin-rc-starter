@@ -71,7 +71,7 @@ export function InvoiceDetailComponent() {
             <span>{`${tx('สร้าง')} ${i.date}`}</span>
             {i.issuedAt && <span>{`${tx('ออก')} ${i.issuedAt}`}</span>}
             {i.dueAt && <span>{`${tx('ครบกำหนด')} ${i.dueAt}`}</span>}
-            {i.cancelledAt && <span className="text-danger">{`${tx('ยกเลิก')} ${i.cancelledAt} · ${tx(i.cancelReason ?? '')}`}</span>}
+            {i.cancelledAt && <span className="text-danger">{`${tx('ยกเลิกแล้ว')} ${i.cancelledAt} · ${tx(i.cancelReason ?? '')}`}</span>}
           </div>
         </div>
         <div className="page-actions">

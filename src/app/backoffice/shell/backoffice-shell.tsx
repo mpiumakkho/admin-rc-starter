@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import {
@@ -209,12 +209,15 @@ export function BackofficeShellComponent() {
                 </button>
                 <ul className="nav-links" id={`nav-${group.key}`} inert={!open}>
                   {group.links.map(link => (
-                    <li key={link.path}>
-                      <NavLink to={link.path}>
-                        <span>{tx(link.label)}</span>
-                        {link.count && counts[link.count] > 0 && <span className="count">{counts[link.count]}</span>}
-                      </NavLink>
-                    </li>
+                    <Fragment key={link.path}>
+                      {link.section && <li className="nav-section">{tx(link.section)}</li>}
+                      <li>
+                        <NavLink to={link.path}>
+                          <span>{tx(link.label)}</span>
+                          {link.count && counts[link.count] > 0 && <span className="count">{counts[link.count]}</span>}
+                        </NavLink>
+                      </li>
+                    </Fragment>
                   ))}
                 </ul>
               </div>
