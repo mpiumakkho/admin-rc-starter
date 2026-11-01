@@ -77,6 +77,8 @@ export const BACKOFFICE_ROUTES: RouteObject[] = [
       { path: 'quality/audit', lazy: async () => ({ Component: (await import('./pages/quality/audit-explorer')).AuditExplorerComponent }) },
       { path: 'quality/audit-exports', lazy: async () => ({ Component: (await import('./pages/quality/audit-exports')).AuditExportsComponent }) },
       { path: 'quality/audit-integrity', lazy: async () => ({ Component: (await import('./pages/quality/audit-integrity')).AuditIntegrityComponent }) },
+      { path: 'reports', loader: () => redirect('/backoffice/reports/executive'), Component: () => null },
+      { path: 'reports/:report', lazy: async () => ({ Component: (await import('./pages/reports/report')).ReportComponent }) },
       { path: '*', ...toOverview },
     ],
   },

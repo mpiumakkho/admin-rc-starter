@@ -83,6 +83,13 @@ const PAGES = [
   { path: '/backoffice/quality/audit', ready: '.bo-table tbody tr' },
   { path: '/backoffice/quality/audit-exports', ready: '.bo-table tbody tr' },
   { path: '/backoffice/quality/audit-integrity', ready: '.bo-table tbody tr' },
+  { path: '/backoffice/reports/executive', ready: '.hbars li' },
+  { path: '/backoffice/reports/revenue', ready: '.hbars li' },
+  { path: '/backoffice/reports/inventory', ready: '.hbars li' },
+  { path: '/backoffice/reports/workforce', ready: '.hbars li' },
+  { path: '/backoffice/reports/assets', ready: '.hbars li' },
+  { path: '/backoffice/reports/quality', ready: '.hbars li' },
+  { path: '/backoffice/reports/compliance', ready: '.hbars li' },
   { path: '/error-pages/404', ready: '.error-code' },
   { path: '/error-pages/500', ready: '.error-code' },
 ];
@@ -102,7 +109,7 @@ for (const theme of ['light', 'dark'] as const) {
     });
 
     test('every page', async ({ page }) => {
-      test.setTimeout(300_000);
+      test.setTimeout(480_000);
       await start(page, '/login', theme);
       await signInAs(page, 'Administrator');
       for (const { path, ready } of PAGES) {
