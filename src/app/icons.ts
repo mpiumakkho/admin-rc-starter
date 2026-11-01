@@ -27,6 +27,7 @@ export {
   Play as lucidePlay,
   Square as lucideSquare,
   ArrowLeft as lucideArrowLeft,
+  ExternalLink as lucideExternalLink,
   ArrowRight as lucideArrowRight,
   ArrowUpDown as lucideArrowUpDown,
   Baby as lucideBaby,

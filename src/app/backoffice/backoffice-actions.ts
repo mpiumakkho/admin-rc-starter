@@ -7,7 +7,14 @@ import { DISCOUNT_THRESHOLD, methodOf, PAYMENT_METHODS, refundable, REFUND_THRES
 import { APPROVAL_KIND, canDecide } from './data/home';
 import { canResolve, INVESTIGATION, type LedgerDispenseInput, RECALL_NEXT, RECALL_SEVERITY, RECALL_STATUS, type ReceiptInput, type WasteInput, wasteReason } from './data/inventory';
 import { CLAIM_KIND, CLAIM_STATUS, type ClaimInput, linkOf, MESSAGE_KIND, type OutboxItem, policyOf, PURPOSE_LABEL } from './data/sales';
-import type { AccountingExport, Approval, BoException, Claim, CountRecord, Recall, RecallStatus, StockReceipt } from './data/types';
+import type {
+  AccountingExport, Approval, BoException, CeRecord, Claim, CountRecord, LeaveRequest, License, OnCallSlot, Privilege, Recall, RecallStatus, Shift, StaffMember, StockReceipt,
+} from './data/types';
+import {
+  canVerify, catalogCourse, CE_STATUS, type CeInput, ceReviewBlock, coverage, daysOf, DEPARTMENTS, EMPLOYMENT, fairness, gaps, LEAVE_STATUS, LEAVE_TYPE, leaveBlock, leaveDays, leaveImpact,
+  type LeaveInput, LICENSE_KIND, type LicenseInput, onCallEligible, previewShift, PRIVILEGE, privilegeBlock, publishBlock, renewProblems, ROLE, SHIFT, type ShiftInput, slotProblem,
+  STAFF_STATUS, type StaffInput, staffOf, weekday,
+} from './data/workforce';
 import { boI18n } from './i18n/bo-i18n';
 
 const baht = (n: number) => `฿${n.toLocaleString('en-US')}`;
@@ -493,6 +500,317 @@ class BackofficeActions {
 
   openItem(drugId: string) {
     void backofficeNavigate(`/backoffice/inventory/items/${encodeURIComponent(drugId)}`);
+  }
+
+  /* Workforce (data/workforce.ts) */
+
+  openStaff(id: string) {
+    void backofficeNavigate(`/backoffice/workforce/staff/${id}`);
+  }
+
+  addStaff(input: StaffInput, onDone?: (member: StaffMember) => void) {
+    backofficeUi.ask({
+      title: `เพิ่มบุคลากร · ${input.name.trim()}`,
+      facts: [['ตำแหน่งงาน', `${boI18n.t(ROLE[input.role].label)} · ${input.position}`], ['แผนก', input.department], ['การจ้าง', boI18n.t(EMPLOYMENT[input.employment])], ['เริ่มงาน', input.startedAt]],
+      intro: ['ทะเบียนบุคลากรไม่ใช่บัญชีผู้ใช้ — การเข้าระบบและบทบาทสร้างแยกที่ IAM (M14) · ใบอนุญาตและสิทธิ์วิชาชีพบันทึกต่อจากนี้'],
+      confirmLabel: 'เพิ่มบุคลากร',
+      onConfirm: () => {
+        const member = backofficeStore.addStaff(input);
+        backofficeUi.toast('เพิ่ม {name} แล้ว · {id}', { name: boI18n.t(member.name), id: member.id });
+        onDone?.(member);
+      },
+    });
+  }
+
+  editStaff(member: StaffMember) {
+    backofficeUi.ask({
+      title: `แก้ไขข้อมูล · ${member.name}`,
+      intro: ['แก้ได้เฉพาะข้อมูลการปฏิบัติงาน · ค่าตอบแทนและสัญญาจ้างไม่อยู่ในขอบเขต'],
+      fields: [
+        { name: 'department', label: 'แผนก', type: 'select', value: member.department, options: DEPARTMENTS.map(v => ({ value: v, label: boI18n.t(v) })) },
+        { name: 'phone', label: 'โทรศัพท์', type: 'input', value: member.phone },
+        { name: 'employment', label: 'การจ้าง', type: 'select', value: member.employment, options: (Object.keys(EMPLOYMENT) as StaffMember['employment'][]).map(k => ({ value: k, label: boI18n.t(EMPLOYMENT[k]) })) },
+        { name: 'status', label: 'สถานะ', type: 'select', value: member.status, options: (Object.keys(STAFF_STATUS) as StaffMember['status'][]).map(k => ({ value: k, label: boI18n.t(STAFF_STATUS[k].label) })) },
+      ],
+      confirmLabel: 'บันทึกข้อมูล',
+      onConfirm: v => {
+        backofficeStore.updateStaff(member, { department: v['department'], phone: v['phone'].trim(), employment: v['employment'] as StaffMember['employment'], status: v['status'] as StaffMember['status'] });
+        backofficeUi.toast('บันทึกข้อมูล {name} แล้ว', { name: boI18n.t(member.name) });
+      },
+    });
+  }
+
+  addLicense(input: LicenseInput, onDone?: (license: License) => void) {
+    const member = staffOf(backofficeStore.data, input.staffId)!;
+    backofficeUi.ask({
+      title: `บันทึกใบอนุญาต · ${member.name}`,
+      facts: [['ชนิด', boI18n.t(LICENSE_KIND[input.kind].label)], ['เลขที่', input.number], ['ผู้ออก', input.issuer || LICENSE_KIND[input.kind].issuer], ['ใช้ได้', `${input.issuedAt} → ${input.expiresAt}`]],
+      intro: ['ใบอนุญาตที่บันทึกใหม่จะรอตรวจสอบกับผู้ออก — ระหว่างนั้นยังใช้เป็นฐานของสิทธิ์วิชาชีพหรือเวรตรวจไม่ได้'],
+      confirmLabel: 'บันทึกใบอนุญาต',
+      onConfirm: () => {
+        const license = backofficeStore.addLicense(input);
+        backofficeUi.toast('บันทึก {no} แล้ว · รอตรวจสอบ', { no: license.number });
+        onDone?.(license);
+      },
+    });
+  }
+
+  /** Checked with the issuer, by someone other than the holder */
+  verifyLicense(l: License) {
+    const d = backofficeStore.data;
+    if (!canVerify(d, l, backofficeStore.userName)) {
+      backofficeUi.toast('ผู้ถือใบอนุญาตตรวจสอบใบอนุญาตของตัวเองไม่ได้ (การแยกหน้าที่)', undefined, 'info');
+      return;
+    }
+    backofficeUi.ask({
+      title: `ตรวจสอบใบอนุญาต · ${l.number}`,
+      facts: [['ผู้ถือ', staffOf(d, l.staffId)?.name ?? '—'], ['ชนิด', boI18n.t(LICENSE_KIND[l.kind].label)], ['ผู้ออก', l.issuer], ['หมดอายุ', l.expiresAt]],
+      intro: ['ยืนยันว่าเลขที่และวันหมดอายุตรงกับผู้ออก · ชื่อผู้ตรวจและเวลาบันทึกเป็นหลักฐาน'],
+      fields: [
+        { name: 'method', label: 'วิธีตรวจ', type: 'select', value: `ตรวจกับเว็บไซต์${l.issuer}`, options: [`ตรวจกับเว็บไซต์${l.issuer}`, 'ตรวจเอกสารตัวจริง', 'โทรยืนยันกับผู้ออก'].map(v => ({ value: v, label: boI18n.t(v) })) },
+        { name: 'note', label: 'หมายเหตุ', type: 'input', optional: true },
+      ],
+      confirmLabel: 'ยืนยันการตรวจสอบ',
+      onConfirm: v => {
+        backofficeStore.verifyLicense(l, v['method'], v['note'].trim());
+        backofficeUi.toast('{no} ตรวจสอบแล้ว', { no: l.number });
+      },
+    });
+  }
+
+  /** A renewal: the new date, checked again before it counts */
+  renewLicense(l: License) {
+    backofficeUi.ask({
+      title: `ต่ออายุใบอนุญาต · ${l.number}`,
+      facts: [['ผู้ถือ', staffOf(backofficeStore.data, l.staffId)?.name ?? '—'], ['หมดอายุเดิม', l.expiresAt]],
+      intro: ['เมื่อบันทึกการต่ออายุ ใบอนุญาตจะกลับไปรอตรวจสอบกับผู้ออกอีกครั้ง'],
+      fields: [
+        { name: 'expiresAt', label: 'วันหมดอายุใหม่ (YYYY-MM-DD)', type: 'input', placeholder: 'เช่น 2031-10-15', validate: v => renewProblems(l, v.trim()) },
+        { name: 'number', label: 'เลขที่ใหม่ (ถ้าเปลี่ยน)', type: 'input', optional: true },
+        { name: 'evidence', label: 'หลักฐาน (ใบเสร็จ / เลขคำขอ)', type: 'input', optional: true, placeholder: 'เช่น ใบเสร็จสัตวแพทยสภา R-55120' },
+      ],
+      confirmLabel: 'บันทึกการต่ออายุ',
+      onConfirm: v => {
+        backofficeStore.renewLicense(l, v['expiresAt'].trim(), v['number'], v['evidence'].trim());
+        backofficeUi.toast('{no} ต่ออายุถึง {date} · รอตรวจสอบ', { no: l.number, date: l.expiresAt });
+      },
+    });
+  }
+
+  addCe(input: CeInput, onDone?: (record: CeRecord) => void) {
+    const member = staffOf(backofficeStore.data, input.staffId)!;
+    const listed = catalogCourse(input.course.trim());
+    backofficeUi.ask({
+      title: `บันทึก CE · ${member.name}`,
+      facts: [['หลักสูตร', input.course], ['วันที่', input.date], ['ชั่วโมง', String(listed?.hours ?? input.hours)], ['ใบรับรอง', input.certificate || '—']],
+      intro: [listed ? 'หลักสูตรในรายการที่โรงพยาบาลรับรอง — นับชั่วโมงทันที' : 'หลักสูตรนอกรายการ — รอผู้ตรวจที่ไม่ใช่ผู้เข้าอบรม และต้องมีใบรับรอง'],
+      confirmLabel: 'บันทึก CE',
+      onConfirm: () => {
+        const record = backofficeStore.addCe(input);
+        backofficeUi.toast(record.status === 'approved' ? 'บันทึก {id} แล้ว · นับ {h} ชม.' : 'บันทึก {id} แล้ว · รอตรวจ', { id: record.id, h: record.hours });
+        onDone?.(record);
+      },
+    });
+  }
+
+  reviewCe(c: CeRecord, decision: 'approved' | 'rejected') {
+    const block = ceReviewBlock(backofficeStore.data, c, backofficeStore.userName, decision);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    const approve = decision === 'approved';
+    backofficeUi.ask({
+      title: `${approve ? 'นับชั่วโมง' : 'ไม่นับชั่วโมง'} · ${c.id}`,
+      tone: approve ? 'primary' : 'danger',
+      facts: [['ผู้เข้าอบรม', staffOf(backofficeStore.data, c.staffId)?.name ?? '—'], ['หลักสูตร', `${c.course} · ${c.provider}`], ['ชั่วโมง', String(c.hours)], ['ใบรับรอง', c.certificate ?? '—']],
+      fields: [{ name: 'note', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        placeholder: approve ? 'เช่น ตรวจใบรับรองและชั่วโมงกับผู้จัดแล้ว' : 'เช่น เนื้อหาไม่เกี่ยวกับงานคลินิก' }],
+      confirmLabel: approve ? 'นับชั่วโมง' : 'ไม่นับชั่วโมง',
+      onConfirm: v => {
+        backofficeStore.reviewCe(c, decision, v['note'].trim());
+        backofficeUi.toast('{id} → {status}', { id: c.id, status: boI18n.t(CE_STATUS[decision].label) });
+      },
+    });
+  }
+
+  attachCertificate(c: CeRecord, file: string) {
+    backofficeStore.attachCertificate(c, file);
+    backofficeUi.toast('แนบใบรับรอง {file} กับ {id} แล้ว', { file, id: c.id });
+  }
+
+  /** Granted or taken back, by someone else, with why; a grant needs the licenses it rests on */
+  changePrivilege(staffId: string, p: Privilege) {
+    const d = backofficeStore.data;
+    const member = staffOf(d, staffId)!;
+    const action = (d.privileges[staffId] ?? []).includes(p) ? 'revoke' : 'grant';
+    const block = privilegeBlock(d, staffId, p, action, backofficeStore.userName);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    const grant = action === 'grant';
+    backofficeUi.ask({
+      title: `${grant ? 'ให้สิทธิ์' : 'ถอนสิทธิ์'} · ${boI18n.t(PRIVILEGE[p].label)}`,
+      tone: grant ? 'primary' : 'danger',
+      facts: [['ชื่อบุคลากร', `${member.name} · ${boI18n.t(member.position)}`], ['ฐานของสิทธิ์', PRIVILEGE[p].needs.length ? PRIVILEGE[p].needs.map(k => boI18n.t(LICENSE_KIND[k].label)).join(', ') : boI18n.t('ตามขอบเขตที่โรงพยาบาลกำหนด')]],
+      intro: ['การเปลี่ยนสิทธิ์วิชาชีพบันทึกผู้มีอำนาจ เวลา และเหตุผลไว้เป็นหลักฐาน · ไม่เปลี่ยนบทบาทหรือสิทธิ์ในระบบ (IAM)'],
+      fields: [{ name: 'reason', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        placeholder: grant ? 'เช่น ผ่านการประเมินครบตามเกณฑ์ของโรงพยาบาล' : 'เช่น ยังไม่ผ่านการอบรมรอบใหม่' }],
+      confirmLabel: grant ? 'ให้สิทธิ์' : 'ถอนสิทธิ์',
+      onConfirm: v => {
+        backofficeStore.changePrivilege(staffId, p, action, v['reason'].trim());
+        backofficeUi.toast(grant ? 'ให้สิทธิ์ {p} แก่ {name} แล้ว' : 'ถอนสิทธิ์ {p} ของ {name} แล้ว', { p: boI18n.t(PRIVILEGE[p].label), name: boI18n.t(member.name) });
+      },
+    });
+  }
+
+  /** A draft shift, refused when it clashes; it can be taken off again before the week goes out */
+  assignShift(input: ShiftInput): boolean {
+    const hard = previewShift(backofficeStore.data, input).filter(c => c.hard);
+    if (hard.length) {
+      backofficeUi.toast(hard[0].text, undefined, 'info');
+      return false;
+    }
+    const shift = backofficeStore.assignShift(input);
+    backofficeUi.toast('จัดเวร{kind} {date} ให้ {name} แล้ว · ฉบับร่าง', { kind: boI18n.t(SHIFT[shift.kind].label), date: shift.date, name: boI18n.t(staffOf(backofficeStore.data, shift.staffId)?.name ?? '') });
+    return true;
+  }
+
+  removeShift(s: Shift) {
+    const name = staffOf(backofficeStore.data, s.staffId)?.name ?? '';
+    const published = s.status === 'published';
+    backofficeUi.ask({
+      title: `ยกเลิกเวร · ${name}`,
+      tone: 'danger',
+      facts: [['วันที่', `${s.date} · ${boI18n.t(weekday(s.date))}`], ['เวร', `${boI18n.t(SHIFT[s.kind].label)} ${SHIFT[s.kind].time}`], ['จุดงาน', s.area]],
+      intro: [published ? 'เวรนี้ประกาศแล้ว — การยกเลิกต้องมีเหตุผล และควรแจ้งผู้เกี่ยวข้อง' : 'เวรฉบับร่างยังไม่ได้ประกาศ ยกเลิกได้'],
+      fields: published ? [{ name: 'reason', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null) }] : [],
+      confirmLabel: 'ยกเลิกเวร',
+      onConfirm: v => {
+        backofficeStore.removeShift(s, (v['reason'] ?? '').trim());
+        backofficeUi.toast('ยกเลิกเวร{kind} {date} ของ {name} แล้ว', { kind: boI18n.t(SHIFT[s.kind].label), date: s.date, name: boI18n.t(name) });
+      },
+    });
+  }
+
+  publishWeek(monday: string) {
+    const d = backofficeStore.data;
+    const block = publishBlock(d, monday);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    const days = daysOf(monday);
+    const drafts = d.shifts.filter(s => days.includes(s.date) && s.status === 'draft').length;
+    const short = gaps(coverage(d, monday)).length;
+    backofficeUi.ask({
+      title: `ประกาศตารางเวร · ${days[0]} – ${days[6]}`,
+      facts: [['เวรฉบับร่าง', String(drafts)], ['เวรที่คนไม่ครบ', String(short)]],
+      intro: ['เมื่อประกาศแล้ว บุคลากรเห็นเวรของตัวเอง · การเปลี่ยนหลังประกาศต้องมีเหตุผล · ตารางเวรไม่ให้บทบาทหรือสิทธิ์วิชาชีพใด ๆ'],
+      warning: short ? boI18n.t('ยังมี {n} เวรที่คนไม่ครบขั้นต่ำ — ประกาศได้ แต่ต้องหาคนแทน', { n: short }) : undefined,
+      confirmLabel: 'ประกาศตารางเวร',
+      onConfirm: () => {
+        const n = backofficeStore.publishWeek(monday);
+        backofficeUi.toast('ประกาศ {n} เวรแล้ว', { n });
+      },
+    });
+  }
+
+  requestLeave(input: LeaveInput, onDone?: (leave: LeaveRequest) => void) {
+    const d = backofficeStore.data;
+    const member = staffOf(d, input.staffId)!;
+    const impact = leaveImpact(d, input);
+    backofficeUi.ask({
+      title: `ยื่นคำขอลา · ${member.name}`,
+      facts: [['ประเภท', boI18n.t(LEAVE_TYPE[input.type])], ['ช่วง', `${input.from} – ${input.to} · ${boI18n.t('{n} วัน', { n: leaveDays(input) })}`], ['เวรที่กระทบ', String(impact.shifts.length)]],
+      intro: ['คำขอรอหัวหน้าที่ไม่ใช่ผู้ขออนุมัติ · การอนุมัติไม่ลบเวร — ตารางเวรจะแสดงเวรที่ต้องหาคนแทน'],
+      confirmLabel: 'ยื่นคำขอ',
+      onConfirm: () => {
+        const leave = backofficeStore.requestLeave(input);
+        backofficeUi.toast('ยื่น {id} แล้ว · รออนุมัติ', { id: leave.id });
+        onDone?.(leave);
+      },
+    });
+  }
+
+  decideLeave(l: LeaveRequest, status: 'approved' | 'rejected') {
+    const d = backofficeStore.data;
+    const block = leaveBlock(d, l, backofficeStore.userName);
+    if (block) {
+      backofficeUi.toast(block, undefined, 'info');
+      return;
+    }
+    const impact = leaveImpact(d, l);
+    const approve = status === 'approved';
+    backofficeUi.ask({
+      title: `${approve ? 'อนุมัติการลา' : 'ไม่อนุมัติการลา'} · ${l.id}`,
+      tone: approve ? 'primary' : 'danger',
+      facts: [['ผู้ขอ', staffOf(d, l.staffId)?.name ?? '—'], ['ประเภท', boI18n.t(LEAVE_TYPE[l.type])], ['ช่วง', `${l.from} – ${l.to}`], ['เวรที่กระทบ', String(impact.shifts.length)]],
+      warning: approve && impact.gaps.length ? boI18n.t('{n} เวรจะมีคนไม่ครบขั้นต่ำ — ต้องจัดคนแทนในตารางเวร', { n: impact.gaps.length }) : undefined,
+      fields: [{ name: 'note', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea', validate: v => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null),
+        placeholder: approve ? 'เช่น อนุมัติ จะจัดคนแทนเวรที่กระทบ' : 'เช่น ช่วงนี้คนไม่พอ ขอให้เลื่อน' }],
+      confirmLabel: approve ? 'อนุมัติ' : 'ปฏิเสธการลา',
+      onConfirm: v => {
+        backofficeStore.decideLeave(l, status, v['note'].trim());
+        backofficeUi.toast('{id} → {status}', { id: l.id, status: boI18n.t(LEAVE_STATUS[status].label) });
+      },
+    });
+  }
+
+  generateOnCall(from: string, to: string) {
+    const drafts = backofficeStore.data.onCall.filter(s => from <= s.date && s.date <= to && s.status === 'draft').length;
+    backofficeUi.ask({
+      title: `สร้างตารางเวร on-call · ${from} – ${to}`,
+      intro: ['จัดคืนที่ยังว่างให้สัตวแพทย์ที่รับเวรได้ (ใบอนุญาตตรวจสอบแล้ว ไม่ได้ลา) คนที่มีคืนน้อยที่สุดก่อน วันหยุดนับแยก และเลี่ยงสองคืนติดกัน · คืนที่ประกาศแล้วคงเดิม'],
+      warning: drafts ? boI18n.t('ฉบับร่างเดิม {n} คืนจะถูกสร้างใหม่', { n: drafts }) : undefined,
+      confirmLabel: 'สร้างตาราง',
+      onConfirm: () => {
+        const made = backofficeStore.generateOnCall(from, to);
+        backofficeUi.toast('จัด {n} คืนแล้ว · ฉบับร่าง', { n: made.length });
+      },
+    });
+  }
+
+  adjustOnCall(slot: OnCallSlot) {
+    const d = backofficeStore.data;
+    const eligible = onCallEligible(d, slot.date);
+    const published = slot.status === 'published';
+    backofficeUi.ask({
+      title: `ปรับเวร on-call · ${slot.date} ${boI18n.t(weekday(slot.date))}`,
+      facts: [['ตอนนี้', staffOf(d, slot.staffId)?.name ?? '—']],
+      fields: [
+        { name: 'staffId', label: 'ผู้รับเวร', type: 'select', value: eligible.some(e => e.id === slot.staffId) ? slot.staffId : eligible[0]?.id ?? '', options: eligible.map(e => ({ value: e.id, label: e.name })) },
+        ...(published ? [{ name: 'reason', label: boI18n.t('เหตุผล (≥{n} ตัวอักษร)', { n: REASON_MIN }), type: 'textarea' as const, validate: (v: string) => (reasonCheck(v) ? boI18n.t(reasonCheck(v)!, { n: REASON_MIN }) : null) }] : []),
+      ],
+      intro: [published ? 'คืนนี้ประกาศแล้ว — การเปลี่ยนต้องมีเหตุผล' : 'เลือกได้เฉพาะสัตวแพทย์ที่รับเวรได้คืนนั้น'],
+      confirmLabel: 'บันทึกการปรับ',
+      onConfirm: v => {
+        backofficeStore.setOnCall(slot, v['staffId'], (v['reason'] ?? '').trim());
+        backofficeUi.toast('เวร on-call {date} → {name}', { date: slot.date, name: boI18n.t(staffOf(d, v['staffId'])?.name ?? '') });
+      },
+    });
+  }
+
+  publishOnCall(from: string, to: string) {
+    const d = backofficeStore.data;
+    const slots = d.onCall.filter(s => from <= s.date && s.date <= to && s.status === 'draft');
+    const bad = slots.find(s => slotProblem(d, s));
+    if (bad) {
+      backofficeUi.toast('{date}: {why}', { date: bad.date, why: boI18n.t(slotProblem(d, bad)!) }, 'info');
+      return;
+    }
+    const f = fairness(d, from, to);
+    backofficeUi.ask({
+      title: `ประกาศตารางเวร on-call · ${from} – ${to}`,
+      facts: [['คืนฉบับร่าง', String(slots.length)], ['ส่วนต่างจำนวนคืน', boI18n.t('{n} คืน', { n: f.spread })]],
+      warning: f.fair ? undefined : boI18n.t('การกระจายยังไม่สมดุล — มีคนรับเวรมากกว่าคนอื่นเกิน 1 คืน'),
+      confirmLabel: 'ประกาศตาราง',
+      onConfirm: () => {
+        const n = backofficeStore.publishOnCall(from, to);
+        backofficeUi.toast('ประกาศเวร on-call {n} คืนแล้ว', { n });
+      },
+    });
   }
 
   /** Seen: who saw it and what they did about it; it is settled in the owning workflow, not here */
