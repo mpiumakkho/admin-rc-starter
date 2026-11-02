@@ -90,6 +90,13 @@ const PAGES = [
   { path: '/backoffice/reports/assets', ready: '.hbars li' },
   { path: '/backoffice/reports/quality', ready: '.hbars li' },
   { path: '/backoffice/reports/compliance', ready: '.hbars li' },
+  { path: '/backoffice/integrations/overview', ready: '.connectors tbody tr' },
+  { path: '/backoffice/integrations/accounting/config', ready: '.target-list li' },
+  { path: '/backoffice/integrations/accounting/queue', ready: '.delivery-queue tbody tr' },
+  { path: '/backoffice/integrations/accounting/reconciliation', ready: '.recon-results tbody tr' },
+  { path: '/backoffice/integrations/lab-imaging', ready: '.lab-connections tbody tr' },
+  { path: '/backoffice/integrations/insurance', ready: '.bo-table tbody tr' },
+  { path: '/backoffice/integrations/import-export', ready: '.jobs tbody tr' },
   { path: '/error-pages/404', ready: '.error-code' },
   { path: '/error-pages/500', ready: '.error-code' },
 ];
