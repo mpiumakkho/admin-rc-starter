@@ -11,6 +11,8 @@ import { CHANNEL, CHANNELS } from '../../data/quality';
 import type { DsarRequest, DsarRight } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const BLANK: DsarInput = { right: '', requester: '', ownerKey: '', pets: '', hns: '', channel: 'email', scope: '' };
 const STATUSES = Object.keys(DSAR_STATUS) as DsarRequest['status'][];
@@ -40,6 +42,8 @@ export function DsarComponent() {
   const set = <K extends keyof DsarInput>(key: K, value: DsarInput[K]) => setForm({ ...form, [key]: value });
   const take = () => backofficeActions.intakeDsar(form, r => { setIntake(false); setForm({ ...BLANK }); go(r); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-dsar className="page">
       <PageHead heading="คำขอใช้สิทธิ์เจ้าของข้อมูล" source="GOV-DSAR-01 · M31 · 8 สิทธิตาม PDPA · ตอบภายใน 30 วัน (เส้นตายจาก backend) · ยืนยันตัวตนก่อนส่งมอบ · สัญญาการออกแบบ (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -79,7 +83,7 @@ export function DsarComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r => {
+                {pager.rows.map(r => {
                   const f = dsarFlag(r);
                   return (
                     <tr key={r.id} tabIndex={0} onClick={() => go(r)} onKeyDown={event => { if (event.key === 'Enter') { go(r); } }}>
@@ -97,6 +101,7 @@ export function DsarComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {intake && (

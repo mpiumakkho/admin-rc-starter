@@ -11,6 +11,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { CHARGE_ITEMS, EXPORT_STATUS, exportsOf, INVOICE_STATUS, invoiceList, lineTotal, statusOf } from '../../data/finance';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STATUS_KEYS = Object.keys(INVOICE_STATUS) as InvoiceStatus[];
 
@@ -61,6 +63,8 @@ export function InvoicesComponent() {
   };
   const open = (i: Invoice) => backofficeActions.openInvoice(i);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-invoices className="page">
       <PageHead heading="ใบแจ้งหนี้" source="M11 · คิวรอเก็บเงินและประวัติใบแจ้งหนี้ของเจ้าของ สัตว์ และ visit" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -103,7 +107,7 @@ export function InvoicesComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(i => {
+                {pager.rows.map(i => {
                   const st = statusOf(i);
                   const x = delivery(i);
                   const owed = st !== 'draft' && st !== 'cancelled' && st !== 'refunded' && i.total - i.paid > 0;
@@ -124,6 +128,7 @@ export function InvoicesComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {/* A new bill: for whom, for what, from the charge items; a draft until it is issued */}

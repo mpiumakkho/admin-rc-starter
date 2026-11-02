@@ -8,6 +8,8 @@ import { lineSummary, MESSAGE_KIND, MESSAGE_STATUS, outbox, owners } from '../..
 import type { MessageKind } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const KINDS = Object.keys(MESSAGE_KIND) as MessageKind[];
 
@@ -23,6 +25,8 @@ export function LineCrmComponent() {
   const ownerRows = owners(store.clinic.data, store.data);
   const flag = (on: boolean, label: string) => <span className={cx('chip', on ? 'ok' : 'quiet')}>{`${tx(label)} ${on ? '✓' : '✕'}`}</span>;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-line-crm className="page">
       <PageHead heading="LINE CRM" source="M15 · ข้อความบริการผ่าน LINE OA · ส่งได้เฉพาะเจ้าของที่เชื่อม LINE และให้ความยินยอมตามวัตถุประสงค์ (M31) · แคมเปญและแต้มสะสมเป็น P2" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -60,7 +64,7 @@ export function LineCrmComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(i => (
+                  {pager.rows.map(i => (
                     <tr key={i.key} className={cx('static', i.block && 'blocked')}>
                       <td><span className={`chip ${MESSAGE_KIND[i.kind].cls}`}>{tx(MESSAGE_KIND[i.kind].label)}</span></td>
                       <td><b>{i.ownerKey}</b><div className="secondary">{i.pet}</div></td>
@@ -76,6 +80,7 @@ export function LineCrmComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
 
           <div className="panel">

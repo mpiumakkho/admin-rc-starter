@@ -12,6 +12,8 @@ import {
 import type { BackofficeData, Complaint } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const SEVERITY_RANK = { severe: 0, moderate: 1, low: 2 };
 
@@ -43,6 +45,8 @@ export function InvestigationComponent() {
     .sort((a, b) => SEVERITY_RANK[a.severity ?? 'low'] - SEVERITY_RANK[b.severity ?? 'low'] || (responseDue(a) ?? '').localeCompare(responseDue(b) ?? ''));
   const selected = d.complaints.find(x => x.id === picked) ?? rows[0] ?? null;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-investigation className="page">
       <PageHead heading="การสอบสวนข้อร้องเรียน" source="M28 P2 · สอบสวนเป็นขั้นตอนพร้อมบันทึกตรวจสอบ · เชื่อม RCA ของ M12 · ข้อร้องเรียนรุนแรงผู้อำนวยการลงนามคำตอบ ผู้ร่างลงนามเองไม่ได้ · ต้นแบบก่อนสัญญาหน้าของ M28 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -63,7 +67,7 @@ export function InvestigationComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(x => {
+                  {pager.rows.map(x => {
                     const sla = slaState(x);
                     return (
                       <tr key={x.id} tabIndex={0} className={cx(x.id === selected?.id && 'selected')} aria-selected={x.id === selected?.id} onClick={() => setPicked(x.id)} onKeyDown={event => { if (event.key === 'Enter') { setPicked(x.id); } }}>
@@ -79,6 +83,7 @@ export function InvestigationComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

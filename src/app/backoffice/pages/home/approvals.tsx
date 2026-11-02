@@ -9,6 +9,8 @@ import { ageDays, APPROVAL_KIND, APPROVAL_STATUS, approvalAging, canDecide } fro
 import type { Approval } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, ModuleTag, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STATUS_KEYS = Object.keys(APPROVAL_STATUS) as Approval['status'][];
 const baht = (n: number) => `฿${n.toLocaleString('en-US')}`;
@@ -27,6 +29,8 @@ export function ApprovalsComponent() {
   const pick = (a: Approval) => setSelectedId(selectedId === a.id ? null : a.id);
   const mayDecide = selected ? canDecide(selected, store.userName) : false;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-approvals className="page">
       <PageHead heading="รายการอนุมัติ" source="คืนเงิน ส่วนลด ส่งออกบันทึกตรวจสอบ ข้อร้องเรียนรุนแรง สิทธิ์ชั่วคราว · ตัดสินได้เฉพาะตามกฎของโมดูลเจ้าของ" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -63,7 +67,7 @@ export function ApprovalsComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(a => (
+                {pager.rows.map(a => (
                   <tr key={a.id} className={cx(a.id === selectedId && 'selected')} onClick={() => pick(a)} tabIndex={0} onKeyDown={event => { if (event.key === 'Enter') { pick(a); } }} aria-selected={a.id === selectedId}>
                     <td><b>{a.ref}</b><div className="secondary"><ModuleTag code={a.module} /></div></td>
                     <td>{tx(APPROVAL_KIND[a.kind])}</td>
@@ -78,6 +82,7 @@ export function ApprovalsComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

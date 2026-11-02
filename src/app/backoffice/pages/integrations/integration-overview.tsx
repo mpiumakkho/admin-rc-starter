@@ -8,6 +8,8 @@ import { DOC_TYPE } from '../../data/finance';
 import { accountingHealth, connectors, ERROR_CLASS, errorClassOf, HEALTH } from '../../data/integrations';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 export function IntegrationOverviewComponent() {
   const store = useBackofficeStore();
@@ -17,6 +19,8 @@ export function IntegrationOverviewComponent() {
   const failed = store.data.accountingExports.filter(x => x.status === 'failed').sort((x, y) => x.firstAt.localeCompare(y.firstAt));
   const days = a.oldestFailedHours >= 48;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-integration-overview className="page">
       <PageHead heading="ภาพรวมการเชื่อมต่อระบบ" source="INT-OVW-01 · COMPOSED · สถานะจากบันทึกการส่งและผลทดสอบของแต่ละ connector · ไม่มีการแก้ไขที่หน้านี้" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -47,7 +51,7 @@ export function IntegrationOverviewComponent() {
               <th scope="col" className="w-owner">{tx('ความพร้อม')}</th>
             </tr></thead>
             <tbody>
-              {rows.map(c => (
+              {pager.rows.map(c => (
                 <tr key={c.key} className="static">
                   <td><Link className="link" to={c.link} aria-label={`${tx('เปิดการเชื่อมต่อ')} ${c.name}`}>{c.name}</Link></td>
                   <td>{tx(c.kind)}</td>
@@ -64,6 +68,7 @@ export function IntegrationOverviewComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
         <p className="secondary foot-note">{tx('การเชื่อมต่อบางประเภทยังไม่อยู่ในขอบเขต')}</p>
       </div>
 

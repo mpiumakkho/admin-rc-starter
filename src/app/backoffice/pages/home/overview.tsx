@@ -8,6 +8,8 @@ import { daysUntil, PRIORITY, STATUS, workload } from '../../data/home';
 import { MODULES, type Module, type WorkItem } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, ModuleTag, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const MODULE_KEYS = Object.keys(MODULES) as Module[];
 const STATUS_KEYS = Object.keys(STATUS) as WorkItem['status'][];
@@ -34,6 +36,8 @@ export function OverviewComponent() {
   const pick = (item: WorkItem) => setSelectedId(selectedId === item.id ? null : item.id);
   const due = (item: WorkItem) => tx(dueText(item.due), { n: Math.abs(daysUntil(item.due)) });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-overview className="page">
       <PageHead heading="ภาพรวมงาน" source="รวมจาก M11 M06 M22 M24 M28 M31 ตามสิทธิ์ · เปิดรายการต้นทางเพื่อแก้ไข" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -77,7 +81,7 @@ export function OverviewComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(item => (
+                {pager.rows.map(item => (
                   <tr key={item.id} className={cx(item.id === selectedId && 'selected')} onClick={() => pick(item)} tabIndex={0} onKeyDown={event => { if (event.key === 'Enter') { pick(item); } }} aria-selected={item.id === selectedId}>
                     <td><span className={`chip ${PRIORITY[item.priority].cls}`}>{tx(PRIORITY[item.priority].label)}</span></td>
                     <td><ModuleTag code={item.module} /></td>
@@ -91,6 +95,7 @@ export function OverviewComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

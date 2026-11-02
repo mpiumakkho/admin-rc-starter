@@ -12,6 +12,8 @@ import type { ClaimInput } from '../../data/sales';
 import type { Claim, ClaimStatus, Insurer } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STATUS_KEYS = Object.keys(CLAIM_STATUS) as ClaimStatus[];
 
@@ -72,6 +74,8 @@ export function ClaimsComponent() {
     setStatus('');
   });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-claims className="page">
       <PageHead heading="การเคลมประกันสัตว์เลี้ยง" source="M16 P1 · ออกเอกสารตามแบบของบริษัทประกัน ส่งเอง และบันทึกสถานะ · การส่งผ่าน API ของ Falcon MSIG Roojai เป็น P4" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -113,7 +117,7 @@ export function ClaimsComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(c => (
+                {pager.rows.map(c => (
                   <tr key={c.id} tabIndex={0} className={cx(c.id === selectedId && 'selected')} aria-selected={c.id === selectedId} onClick={() => pick(c)} onKeyDown={event => { if (event.key === 'Enter') { pick(c); } }}>
                     <td><b>{c.id}</b><div className="secondary">{tx(CLAIM_KIND[c.kind])}</div></td>
                     <td>{c.insurer}<div className="secondary">{policyNo(c)}</div></td>
@@ -128,6 +132,7 @@ export function ClaimsComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {creating ? (

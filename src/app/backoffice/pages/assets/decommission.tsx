@@ -11,6 +11,8 @@ import {
 import type { Decommission } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const baht = (n: number) => `฿${n.toLocaleString('en-US')}`;
 const METHODS = Object.keys(DECOMMISSION_METHOD) as Decommission['method'][];
@@ -39,6 +41,8 @@ export function DecommissionComponent() {
     </ul>
   );
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-decommission className="page">
       <PageHead heading="การเลิกใช้งานอุปกรณ์" source="M22 P2 · ขอ → ผู้อื่นอนุมัติ → จำหน่ายพร้อมหลักฐาน · ยกเลิกการผูกเตียง PM ที่ค้าง และสัญญาโดยอัตโนมัติ · ประวัติเก็บไว้ · การตัดจำหน่ายทางบัญชีอยู่นอกขอบเขต · ต้นแบบก่อนสัญญาหน้าของ M22 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -61,7 +65,7 @@ export function DecommissionComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(r => (
+                  {pager.rows.map(r => (
                     <tr key={r.id} tabIndex={0} className={cx(r.id === selectedId && 'selected')} aria-selected={r.id === selectedId} onClick={() => pick(r.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(r.id); } }}>
                       <td><b>{r.id}</b><div className="secondary">{r.requestedAt}</div></td>
                       <td>{tx(eq(r.equipmentId).name)}<div className="secondary">{r.equipmentId}</div></td>
@@ -73,6 +77,7 @@ export function DecommissionComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

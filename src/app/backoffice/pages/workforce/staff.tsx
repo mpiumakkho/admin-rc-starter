@@ -10,6 +10,8 @@ import type { StaffMember, StaffRole } from '../../data/types';
 import { DEPARTMENTS, EMPLOYMENT, LICENSE_KIND, LICENSE_STATE, licensesOf, licenseState, ROLE, STAFF_STATUS, staffProblems, staffRows, type StaffInput } from '../../data/workforce';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const ROLES = Object.keys(ROLE) as StaffRole[];
 const EMPLOYMENTS = Object.keys(EMPLOYMENT) as StaffMember['employment'][];
@@ -39,6 +41,8 @@ export function StaffComponent() {
   const openCreate = () => { setSelectedId(null); setCreating(true); };
   const create = () => backofficeActions.addStaff(form, member => { setCreating(false); setForm(blank()); setSelectedId(member.id); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-staff className="page">
       <PageHead heading="บุคลากรทั้งหมด" source="M24 P2 · ทะเบียนบุคลากรและสถานะการปฏิบัติงาน · ไม่ใช่บัญชีผู้ใช้ (M14 IAM) · ไม่มีเงินเดือนหรือสัญญาจ้าง · ต้นแบบก่อนสัญญาหน้าของ M24 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -75,7 +79,7 @@ export function StaffComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r => (
+                {pager.rows.map(r => (
                   <tr key={r.staff.id} tabIndex={0} className={cx(r.staff.id === selectedId && 'selected')} aria-selected={r.staff.id === selectedId} onClick={() => pick(r.staff.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(r.staff.id); } }}>
                     <td><b>{tx(r.staff.name)}</b><div className="secondary">{`${tx(r.staff.position)} · ${tx(EMPLOYMENT[r.staff.employment])}`}</div></td>
                     <td><span className={`chip ${ROLE[r.staff.role].cls}`}>{tx(ROLE[r.staff.role].label)}</span></td>
@@ -92,6 +96,7 @@ export function StaffComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {creating ? (

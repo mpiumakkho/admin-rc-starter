@@ -11,6 +11,8 @@ import { attemptsOf, ERROR_CLASS, type ErrorClass, errorClassOf, payloadMeta } f
 import type { AccountingExport } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STATUS_KEYS = Object.keys(EXPORT_STATUS) as AccountingExport['status'][];
 const DOC_TYPES = Object.keys(DOC_TYPE) as AccountingExport['docType'][];
@@ -38,6 +40,8 @@ export function DeliveryQueueComponent() {
   const pick = (x: AccountingExport) => setSelectedId(selectedId === x.id ? null : x.id);
   const chip = (x: AccountingExport) => <span className={`chip ${EXPORT_STATUS[x.status].cls}`}>{tx(EXPORT_STATUS[x.status].label)}</span>;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-delivery-queue className="page">
       <PageHead heading="คิวส่งข้อมูลบัญชี" source="INT-ACC-02 · M11 accounting_export_log · record ชุดเดียวกับการเงิน > ส่งข้อมูลบัญชี · สถานะส่งแล้วไม่ใช่ผล e-Tax" freshness="รอบส่งล่าสุด 06:00" />
@@ -78,7 +82,7 @@ export function DeliveryQueueComponent() {
                 <th scope="col" className="w-kind">{tx('ประเภทข้อผิดพลาด')}</th>
               </tr></thead>
               <tbody>
-                {rows.map(x => {
+                {pager.rows.map(x => {
                   const e = errorClassOf(x.errorCode);
                   return (
                     <tr key={x.id} className={cx(x.id === selectedId && 'selected')} tabIndex={0} onClick={() => pick(x)} onKeyDown={event => { if (event.key === 'Enter') { pick(x); } }} aria-selected={x.id === selectedId} aria-label={`${x.id} ${x.document}`}>
@@ -98,6 +102,7 @@ export function DeliveryQueueComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
           <p className="secondary foot-note">{tx('วันทำการเป็นวันของเอกสาร เวลาส่งเป็นเวลาของ adapter')}</p>
         </div>
 

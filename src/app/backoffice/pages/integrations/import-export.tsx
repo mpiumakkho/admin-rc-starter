@@ -7,6 +7,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { JOB_STATUS, type JobStatus, jobs } from '../../data/integrations';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, ModuleTag, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STATUS_KEYS = Object.keys(JOB_STATUS) as JobStatus[];
 
@@ -23,6 +25,8 @@ export function ImportExportComponent() {
   const pick = (id: string) => setSelectedId(selectedId === id ? null : id);
   const chip = (s: JobStatus) => <span className={`chip ${JOB_STATUS[s].cls}`}>{tx(JOB_STATUS[s].label)}</span>;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-import-export className="page">
       <PageHead heading="ประวัติการนำเข้าและส่งออก" source="INT-IEX-01 · M11 accounting_export_log · M31 RoPA · ประวัติอ่านอย่างเดียว ไม่ใช่คิวที่สอง · ส่งออกสำเร็จไม่ได้แปลว่าปลายทางยอมรับ" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -57,7 +61,7 @@ export function ImportExportComponent() {
                 <th scope="col" className="w-ref">{tx('ไฟล์ผลลัพธ์')}</th>
               </tr></thead>
               <tbody>
-                {rows.map(j => (
+                {pager.rows.map(j => (
                   <tr key={j.id} className={cx(j.id === selectedId && 'selected')} tabIndex={0} onClick={() => pick(j.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(j.id); } }} aria-selected={j.id === selectedId}>
                     <td className="num">{j.at}</td>
                     <td><b>{tx(j.title)}</b><div className="secondary">{`${tx(j.kind === 'export' ? 'ส่งออก' : 'นำเข้า')} · ${j.id}`}</div></td>
@@ -71,6 +75,7 @@ export function ImportExportComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

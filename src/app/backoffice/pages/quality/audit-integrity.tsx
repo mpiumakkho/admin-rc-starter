@@ -7,6 +7,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { integrity, integrityCounts } from '../../data/governance';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const ids = (events: { id: string }[]) => events.map(e => e.id).join(', ');
 
@@ -16,6 +18,8 @@ export function AuditIntegrityComponent() {
   const rows = integrity(store.data);
   const c = integrityCounts(store.data);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-audit-integrity className="page">
       <PageHead heading="ความถูกต้องและการเก็บ Audit" source="GOV-AUD-03 · M13 · event_hash ต่อเหตุการณ์ตรวจโดย server · การตรวจแบบลูกโซ่ (prev_hash) และการเก็บ 7 ปีแบ่งรายเดือนเป็น P3 · บันทึกแก้ ลบ หรือซ่อมไม่ได้" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -41,7 +45,7 @@ export function AuditIntegrityComponent() {
               <th scope="col" className="w-actions">finding</th>
             </tr></thead>
             <tbody>
-              {rows.map(p => (
+              {pager.rows.map(p => (
                 <tr key={p.period} className="static">
                   <td><b>{p.period}</b></td>
                   <td className="num">{p.events}</td>
@@ -59,6 +63,7 @@ export function AuditIntegrityComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
         <p className="secondary foot-note">{tx('hash ที่ไม่ตรงเปิดเป็น finding ให้ Security owner สอบสวน ไม่มีการแก้อัตโนมัติ')} <Link className="link" to="/backoffice/quality/audit">{tx('เปิดใน Audit Explorer')}</Link></p>
       </div>
 

@@ -8,6 +8,8 @@ import { SEVERITY } from '../../data/home';
 import { type Bar, CUTOFF, PERIODS, report, type ReportKey } from '../../data/reports';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { ModuleTag, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const KEYS: ReportKey[] = ['executive', 'revenue', 'inventory', 'workforce', 'assets', 'quality', 'compliance'];
 const max = (list: Bar[]) => Math.max(0, ...list.map(b => b.value));
@@ -20,6 +22,8 @@ export function ReportComponent() {
   const [days, setDays] = useState(30);
   const r = report(key, store.clinic.data, store.data, days);
 
+  /** The table's pages */
+  const pager = usePager(r.rows);
   return (
     <bo-report className="page">
       <PageHead heading={r.title} source={r.source} freshness={tx('ตัดข้อมูล {at}', { at: CUTOFF })}>
@@ -75,7 +79,7 @@ export function ReportComponent() {
               <th scope="col">{tx('รายการ')}</th>
             </tr></thead>
             <tbody>
-              {r.rows.map((x, i) => (
+              {pager.rows.map((x, i) => (
                 <tr key={i} className="static">
                   <td><span className={cx('chip', SEVERITY[x.severity].cls)}>{tx(SEVERITY[x.severity].label)}</span></td>
                   <td><ModuleTag code={x.module} /></td>
@@ -87,6 +91,7 @@ export function ReportComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
       </div>
 
       <details className="panel metric-contracts">

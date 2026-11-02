@@ -9,6 +9,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { reconcile, type Variance } from '../../data/finance';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const money = (v: number | string) => (typeof v === 'number' ? baht(v) : v);
 
@@ -25,6 +27,8 @@ export function ReconciliationComponent() {
   const selected = day.variances.find(v => keyOf(v) === selectedKey) ?? null;
   const pick = (v: Variance) => setSelectedKey(selectedKey === keyOf(v) ? null : keyOf(v));
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-reconciliation className="page">
       <PageHead heading="กระทบยอดประจำวัน" source="M11 · ใบแจ้งหนี้ การรับชำระ การคืนเงิน และการส่งบัญชีของวันทำการ · ไม่ใช่การกระทบยอดธนาคารหรือปิดงวด" freshness="ตัดยอดสิ้นวันทำการ">
@@ -68,7 +72,7 @@ export function ReconciliationComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(v => (
+                {pager.rows.map(v => (
                   <tr key={keyOf(v)} className={cx(keyOf(v) === selectedKey && 'selected')} tabIndex={0} onClick={() => pick(v)} onKeyDown={event => { if (event.key === 'Enter') { pick(v); } }} aria-selected={keyOf(v) === selectedKey}>
                     <td>{tx(v.kind)}</td>
                     <td><b>{v.reference}</b>{v.invoice && <div className="secondary">{v.invoice.ownerKey}</div>}</td>
@@ -83,6 +87,7 @@ export function ReconciliationComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

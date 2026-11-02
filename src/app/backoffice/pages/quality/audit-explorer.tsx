@@ -8,6 +8,8 @@ import { accessLog, type AuditQuery, queryEvents, queryProblem, RANGE_DAYS, RELA
 import type { AuditEvent } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const RESULTS = Object.keys(RESULT) as AuditEvent['result'][];
 const rangeLabel = (days: number) => (days === 1 ? 'วันนี้' : '{n} วันล่าสุด');
@@ -46,6 +48,8 @@ export function AuditExplorerComponent() {
   };
   const pick = (id: string) => setSelectedId(selectedId === id ? null : id);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-audit-explorer className="page">
       <PageHead heading="ค้นประวัติ Audit" source="GOV-AUD-01 · M13 · GET /audit/v1/events · ค้นได้ 3 รูปแบบตาม index · เหตุการณ์แก้หรือลบไม่ได้ · ระดับความเสี่ยงจาก backend · ไม่มีคอลัมน์ IP" freshness={tx('นำเข้าล่าสุด {at}', { at: RELAY.lastIngest })} />
@@ -97,7 +101,7 @@ export function AuditExplorerComponent() {
                 <th scope="col" className="w-kind">{tx('ระดับความเสี่ยง')}</th>
               </tr></thead>
               <tbody>
-                {rows.map(e => (
+                {pager.rows.map(e => (
                   <tr key={e.id} tabIndex={0} className={cx(e.id === selectedId && 'selected')} aria-selected={e.id === selectedId} onClick={() => pick(e.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(e.id); } }}>
                     <td className="num">{e.occurredAt}</td>
                     <td>{tx(e.actor)}<div className="secondary">{e.actorRole}</div></td>
@@ -111,6 +115,7 @@ export function AuditExplorerComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

@@ -7,6 +7,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { addDays, overtime, ROLE, weekOf } from '../../data/workforce';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const THIS_WEEK = weekOf(TODAY);
 const WEEKS = [THIS_WEEK, addDays(THIS_WEEK, 7)];
@@ -21,6 +23,8 @@ export function OvertimeComponent() {
   const sum = (k: 'shifts' | 'hours' | 'night' | 'scheduled' | 'callOut' | 'total') => rows.reduce((n, r) => n + r[k], 0);
   const t = { shifts: sum('shifts'), hours: sum('hours'), night: sum('night'), scheduled: sum('scheduled'), callOut: sum('callOut'), total: sum('total'), people: rows.filter(r => r.total).length };
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-overtime className="page">
       <PageHead heading="สรุปการทำงานล่วงเวลา" source="M24 P2 · คำนวณจากเวรในตาราง (ไม่นับวันลา) เทียบชั่วโมงตามสัญญา และชั่วโมงที่ถูกเรียกเข้าตอนรับเวร on-call · ตัวเลขเพื่อการดำเนินงาน ไม่ใช่ข้อมูลเงินเดือน" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -56,7 +60,7 @@ export function OvertimeComponent() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {pager.rows.map(r => (
                 <tr key={r.staff.id} className="static">
                   <td><b>{tx(r.staff.name)}</b><div className="secondary">{tx(ROLE[r.staff.role].label)}</div></td>
                   <td className="num">{r.shifts}</td>
@@ -83,6 +87,7 @@ export function OvertimeComponent() {
             </tfoot>
           </table>
         </div>
+        <PagerFoot pager={pager} />
         <p className="secondary foot-note">{tx('ไม่มีอัตราค่าจ้าง ภาษี หรือสวัสดิการในหน้านี้ — การคำนวณเงินต้องมีกฎ payroll ที่อนุมัติแล้ว ซึ่งอยู่นอกขอบเขต')}</p>
       </div>
     </bo-overtime>

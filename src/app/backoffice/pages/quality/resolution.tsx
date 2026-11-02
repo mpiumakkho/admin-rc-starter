@@ -64,7 +64,7 @@ export function ResolutionComponent() {
       <div className="split pair">
         <div className="panel">
           <div className="filter-bar"><b>{tx('ข้อร้องเรียน 6 เดือนตามประเภท')}</b><span className="secondary grow">{tx('นับตามเดือนที่รับเรื่อง')}</span></div>
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label={tx('ข้อร้องเรียน 6 เดือนตามประเภท')}>
             <table className="bo-table dt-months">
               <thead><tr><th scope="col">{tx('ประเภท')}</th>{trend.map(m => <th key={m.month} scope="col" className="num">{m.month.slice(2).replace('-', '/')}</th>)}</tr></thead>
               <tbody>

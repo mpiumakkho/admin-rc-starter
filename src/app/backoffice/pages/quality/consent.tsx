@@ -9,6 +9,8 @@ import { CONSENT_PURPOSE, CONSENT_STATUS, CONSENT_VERSION, consentLedger, covera
 import type { ConsentGrant, ConsentPurpose } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const CHANNELS = ['แบบฟอร์มที่โรงพยาบาล', 'LINE', 'อีเมล'];
 const OWN_PURPOSES: ('insurance' | 'case-study')[] = ['insurance', 'case-study'];
@@ -33,6 +35,8 @@ export function ConsentComponent() {
   const owners = Object.keys(store.clinic.data.owners).sort();
   const record = () => backofficeActions.recordConsent(owner, own, granted, channel, () => { setRecording(false); setOwner(''); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-consent className="page">
       <PageHead heading="ทะเบียนความยินยอม" source="GOV-CNS-01 · M31 · consent_grant ต่อเจ้าของและวัตถุประสงค์ · ความยินยอมของ LINE อ่านจาก LINE CRM (M15) · แก้แบบฟอร์มที่ settings/10 · สัญญาการออกแบบ (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -93,7 +97,7 @@ export function ConsentComponent() {
                 <th scope="col" className="w-send"><span className="visually-hidden">{tx('การดำเนินการ')}</span></th>
               </tr></thead>
               <tbody>
-                {rows.map(g => (
+                {pager.rows.map(g => (
                   <tr key={g.id} className="static">
                     <td><b>{g.ownerKey}</b><div className="secondary">{tx(g.channel)}</div></td>
                     <td>{tx(CONSENT_PURPOSE[g.purpose].label)}</td>
@@ -107,6 +111,7 @@ export function ConsentComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {recording && (

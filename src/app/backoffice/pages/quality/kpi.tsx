@@ -8,6 +8,8 @@ import { KPI_DOMAIN, kpiNow, kpiSeries, onTarget } from '../../data/quality';
 import type { KpiDefinition } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 type Domain = KpiDefinition['domain'];
 const DOMAINS = Object.keys(KPI_DOMAIN) as Domain[];
@@ -27,6 +29,8 @@ export function KpiComponent() {
   const selected = d.kpis.find(k => k.id === selectedId) ?? null;
   const pick = (id: string) => setSelectedId(selectedId === id ? null : id);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-kpi-library className="page">
       <PageHead heading="คลังตัวชี้วัดคุณภาพ" source="M12 P2 · kpi_definition และ kpi_snapshot รายเดือน · ตัวที่คำนวณตอนนี้อ่านจากโมดูลต้นทาง · ค่าเทียบมาตรฐานเป็นตัวอย่างจนกว่าจะได้เกณฑ์ TAHSA/AAHA ฉบับจริง · ต้นแบบก่อนสัญญาหน้าของ M12 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -52,7 +56,7 @@ export function KpiComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(r => (
+                {pager.rows.map(r => (
                   <tr key={r.def.id} tabIndex={0} className={cx(r.def.id === selectedId && 'selected')} aria-selected={r.def.id === selectedId} onClick={() => pick(r.def.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(r.def.id); } }}>
                     <td><b>{tx(r.def.name)}</b><div className="secondary">{r.def.id} · {tx(KPI_DOMAIN[r.def.domain])} · {tx(r.def.unit)}{r.now.live && <> · {tx('คำนวณตอนนี้')}</>}</div></td>
                     <td className="num"><b className={cx(!r.now.met && 'text-danger')}>{r.now.value}</b>
@@ -65,6 +69,7 @@ export function KpiComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (() => {

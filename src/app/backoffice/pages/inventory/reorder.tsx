@@ -7,6 +7,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { CONTROL_SYSTEM, stockList, type StockItem } from '../../data/inventory';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const gap = (i: StockItem) => Math.round((i.drug.reorderThreshold - (i.onHand ?? 0)) * 100) / 100;
 
@@ -19,6 +21,8 @@ export function ReorderComponent() {
   const selected = rows.find(i => i.drug.id === selectedId) ?? null;
   const pick = (i: StockItem) => setSelectedId(selectedId === i.drug.id ? null : i.drug.id);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-reorder className="page">
       <PageHead heading="รายการยาที่ต้องเติม" source="M06 · รายการที่คงเหลือถึงจุดสั่งเติม (is_low) · อ่านอย่างเดียว ไม่มีการรับทราบ มอบหมาย หรือปิดรายการ" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -44,7 +48,7 @@ export function ReorderComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(i => (
+                {pager.rows.map(i => (
                   <tr key={i.drug.id} tabIndex={0} className={cx(i.drug.id === selectedId && 'selected')} aria-selected={i.drug.id === selectedId} onClick={() => pick(i)} onKeyDown={event => { if (event.key === 'Enter') { pick(i); } }}>
                     <td><b>{i.drug.name}</b><div className="secondary">{`${i.drug.id} · ${tx(i.location)}`}</div></td>
                     <td className="num text-danger">{i.onHand ?? '—'} {tx(i.drug.unit)}</td>
@@ -58,6 +62,7 @@ export function ReorderComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

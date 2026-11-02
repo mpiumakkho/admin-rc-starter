@@ -11,6 +11,8 @@ import { daysUntil } from '../../data/home';
 import type { PmTask } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 type View = 'alert' | 'all' | 'done';
 const VIEWS: [View, string][] = [['alert', 'เกินกำหนดและ 30 วัน'], ['all', 'ที่ค้างทั้งหมด'], ['done', 'ทำแล้ว']];
@@ -40,6 +42,8 @@ export function PmComponent() {
   const set = <K extends keyof PmInput>(key: K, value: PmInput[K]) => setForm({ ...form, [key]: value });
   const record = (t: PmTask) => backofficeActions.completePm(t, form, () => { setForm({ ...BLANK }); setSelectedId(null); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-pm className="page">
       <PageHead heading="แผนบำรุงรักษาเชิงป้องกัน" source="M22 P2 · แจ้งเตือนล่วงหน้า 30 วัน · PM ครั้งถัดไปวางแผนจากวันที่ทำ · PM ไม่ผ่านจะหยุดใช้อุปกรณ์ · ไม่มีใบสั่งงานซ่อมและอะไหล่ในขอบเขต · ต้นแบบก่อนสัญญาหน้าของ M22 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -72,7 +76,7 @@ export function PmComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(t => {
+                  {pager.rows.map(t => {
                     const e = eq(t);
                     const st = dueState(t.due);
                     const n = days(t);
@@ -97,6 +101,7 @@ export function PmComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

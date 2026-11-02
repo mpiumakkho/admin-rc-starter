@@ -8,6 +8,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { allLots, EXPIRY_BUCKETS, expiryCounts, LOT_STATE, type ExpiryBucket, type LotRow } from '../../data/inventory';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const info = (key: ExpiryBucket) => EXPIRY_BUCKETS.find(b => b.key === key)!;
 
@@ -24,6 +26,8 @@ export function LotsComponent() {
   const selected = rows.find(l => l.lot === selectedLot) ?? null;
   const pick = (l: LotRow) => setSelectedLot(selectedLot === l.lot ? null : l.lot);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-lots className="page">
       <PageHead heading="Lot และวันหมดอายุ" source="M06 · lot ของทุกรายการยา เรียงตามวันหมดอายุ · ช่วงเตือน 30/60/90 วันนับถึงวันสุดท้ายของเดือนที่ระบุ · Read API ของ lot ยังไม่อนุมัติ (GATED) — ข้อมูลตัวอย่าง" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -57,7 +61,7 @@ export function LotsComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(l => (
+                {pager.rows.map(l => (
                   <tr key={l.lot} tabIndex={0} className={cx(l.lot === selectedLot && 'selected')} aria-selected={l.lot === selectedLot} onClick={() => pick(l)} onKeyDown={event => { if (event.key === 'Enter') { pick(l); } }}>
                     <td><b>{l.lot}</b></td>
                     <td>{l.drug}</td>
@@ -72,6 +76,7 @@ export function LotsComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

@@ -8,6 +8,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { financeOverview, receivables, reconcile } from '../../data/finance';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 export function FinanceOverviewComponent() {
   const store = useBackofficeStore();
@@ -20,6 +22,8 @@ export function FinanceOverviewComponent() {
   }));
   const rows = [...day.variances, ...overdue];
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-finance-overview className="page">
       <PageHead heading="ภาพรวมการเงิน" source="รวมจาก M11 ตามสิทธิ์ · ทุกตัวเลขมีที่มาและเปิดไปหน้าต้นทางได้ · ไม่แก้ไขที่หน้านี้" freshness="ตัดยอด ณ วันนี้ 11:32" />
@@ -66,7 +70,7 @@ export function FinanceOverviewComponent() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(v => (
+              {pager.rows.map(v => (
                 <tr key={v.reference + v.kind} className="static">
                   <td>{tx(v.kind)}</td>
                   <td><b>{v.reference}</b>{v.invoice && <div className="secondary">{`${v.invoice.ownerKey} · ${v.invoice.pet}`}</div>}</td>
@@ -80,6 +84,7 @@ export function FinanceOverviewComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
       </div>
     </bo-finance-overview>
   );

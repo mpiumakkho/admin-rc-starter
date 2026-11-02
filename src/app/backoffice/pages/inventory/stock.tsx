@@ -9,6 +9,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { CONTROL_SYSTEM, EXPIRY_BUCKETS, locationsOf, LOT_STATE, stockList, type ExpiryBucket, type StockItem } from '../../data/inventory';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const bucket = (key: ExpiryBucket) => EXPIRY_BUCKETS.find(b => b.key === key)!;
 
@@ -32,6 +34,8 @@ export function StockComponent() {
   const selected = all.find(i => i.drug.id === selectedId) ?? null;
   const pick = (i: StockItem) => setSelectedId(selectedId === i.drug.id ? null : i.drug.id);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-stock className="page">
       <PageHead heading="คลังยา" source="M06 · คงเหลือ จุดสั่งเติม และการนับล่าสุดเป็นของระบบ ไม่คำนวณใหม่ในหน้านี้ · ปรับสต็อกได้ผ่านการรับเข้าและการนับเท่านั้น" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -67,7 +71,7 @@ export function StockComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(i => (
+                {pager.rows.map(i => (
                   <tr key={i.drug.id} tabIndex={0} className={cx(i.drug.id === selectedId && 'selected')} aria-selected={i.drug.id === selectedId} onClick={() => pick(i)} onKeyDown={event => { if (event.key === 'Enter') { pick(i); } }}>
                     <td><b>{i.drug.name}</b><div className="secondary">{`${i.drug.id} · ${tx(i.drug.form)} · ${tx(i.location)}`}</div></td>
                     <td className={cx('num', i.isLow && 'text-danger')}>{i.onHand ?? '—'} {tx(i.drug.unit)}</td>
@@ -85,6 +89,7 @@ export function StockComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

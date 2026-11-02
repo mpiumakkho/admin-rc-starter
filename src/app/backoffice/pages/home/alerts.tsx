@@ -9,6 +9,8 @@ import { EXCEPTION_KIND, exceptionGroups, SEVERITY, severityCounts } from '../..
 import type { BoException, Severity } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { ModuleTag, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const SEVERITY_KEYS = Object.keys(SEVERITY) as Severity[];
 
@@ -23,6 +25,8 @@ export function AlertsComponent() {
   const acknowledged: BoException[] = exceptions.filter(x => !!x.acknowledgedAt).sort((a, b) => b.acknowledgedAt!.localeCompare(a.acknowledgedAt!));
   const severityChip = (x: BoException) => <span className={`chip ${SEVERITY[x.severity].cls}`}>{tx(SEVERITY[x.severity].label)}</span>;
 
+  /** The table's pages */
+  const pager = usePager(acknowledged);
   return (
     <bo-alerts className="page">
       <PageHead heading="การแจ้งเตือนและข้อยกเว้น" source="การชำระ/ส่งออกไม่สำเร็จ สต็อกต่ำ ใกล้หมดอายุ ใบอนุญาต อุปกรณ์เสีย และความเสี่ยง SLA · รับทราบที่นี่ แก้ไขที่โมดูลเจ้าของ" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -85,7 +89,7 @@ export function AlertsComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {acknowledged.map(x => (
+                  {pager.rows.map(x => (
                     <tr key={x.id} className="static">
                       <td>{severityChip(x)}</td>
                       <td><b>{tx(x.title)}</b><div className="secondary">{`${tx(EXCEPTION_KIND[x.kind])} · ${x.ref}`}</div></td>
@@ -96,6 +100,7 @@ export function AlertsComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </details>
         )}
       </div>

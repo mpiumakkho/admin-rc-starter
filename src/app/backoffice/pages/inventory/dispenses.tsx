@@ -8,6 +8,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { dispenseHistory, dispenseScopes, wasteReason, type DispenseRow } from '../../data/inventory';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const SOURCE: Record<DispenseRow['source'], { label: string; cls: string }> = {
   pharmacy: { label: 'ห้องยา', cls: 'info' },
@@ -32,6 +34,8 @@ export function DispensesComponent() {
   const changeScope = (s: 'patient' | 'drug') => { setScope(s); setKey(''); setSelectedId(null); };
   const pick = (r: DispenseRow) => setSelectedId(selectedId === r.id ? null : r.id);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-dispenses className="page">
       <PageHead heading="ประวัติการจ่ายยา" source="M06 · ค้นได้ตามผู้ป่วยหรือตามรายการยาเท่านั้น ไม่มีมุมมองทั้งหมด · รายการเป็น append-only" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -55,6 +59,7 @@ export function DispensesComponent() {
           {!key ? (
             <div className="prompt">{tx('เลือกผู้ป่วยหรือรายการยาก่อนค้นหา')}<div className="secondary">{tx('ประวัติการจ่ายยาเป็นข้อมูลคุ้มครอง จึงเปิดได้ทีละขอบเขตตามสิทธิ์')}</div></div>
           ) : (
+            <>
             <div className="table-wrap">
               <table className="bo-table">
                 <thead>
@@ -70,7 +75,7 @@ export function DispensesComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(r => (
+                  {pager.rows.map(r => (
                     <tr key={r.id} tabIndex={0} className={cx(r.id === selectedId && 'selected')} aria-selected={r.id === selectedId} onClick={() => pick(r)} onKeyDown={event => { if (event.key === 'Enter') { pick(r); } }}>
                       <td className="num">{r.at}</td>
                       <td><b>{scope === 'patient' ? r.drug : r.patient}</b><div className="secondary">{r.id}</div></td>
@@ -86,6 +91,8 @@ export function DispensesComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
+            </>
           )}
         </div>
 

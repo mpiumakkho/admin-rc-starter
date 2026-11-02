@@ -11,6 +11,8 @@ import type { License, LicenseKind } from '../../data/types';
 import { canVerify, expiryCounts, LICENSE_KIND, LICENSE_STATE, licenseProblems, licenseState, type LicenseInput, type LicenseState, ROLE, staffOf } from '../../data/workforce';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STRIP: LicenseState[] = ['expired', 'd30', 'd60', 'd90', 'pending'];
 const KINDS = Object.keys(LICENSE_KIND) as LicenseKind[];
@@ -52,6 +54,8 @@ export function CredentialsComponent() {
     setSelectedId(license.id);
   });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-credentials className="page">
       <PageHead heading="ใบอนุญาตและคุณสมบัติวิชาชีพ" source="M24 P2 · ติดตามการตรวจสอบและวันหมดอายุ 30/60/90 วัน · ไทยไม่มีระบบรับรองพยาบาลสัตว์ โรงพยาบาลกำหนดขอบเขตเอง · ต้นแบบก่อนสัญญาหน้าของ M24 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -89,7 +93,7 @@ export function CredentialsComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(l => {
+                {pager.rows.map(l => {
                   const st = licenseState(l);
                   const n = days(l);
                   return (
@@ -107,6 +111,7 @@ export function CredentialsComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {creating ? (

@@ -10,6 +10,8 @@ import { dimensionChange, MM_OUTCOME, mmBlock, mmProblems, type MmInput, respons
 import type { MmReview } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const BLANK: MmInput = { pet: '', outcome: 'complication', eventDate: TODAY, summary: '', presenter: '', reviewDate: TODAY, incidentId: '' };
 const OUTCOMES = Object.keys(MM_OUTCOME) as MmReview['outcome'][];
@@ -34,6 +36,8 @@ export function CultureComponent() {
   const startMm = () => { setSelectedId(null); setForm({ ...BLANK }); setScheduling(true); };
   const set = <K extends keyof MmInput>(key: K, value: MmInput[K]) => setForm({ ...form, [key]: value });
 
+  /** The table's pages */
+  const pager = usePager(mm);
   return (
     <bo-safety-culture className="page">
       <PageHead heading="วัฒนธรรมความปลอดภัยและ M&M" source="M12 P2 · safety_culture_survey ทั้งโรงพยาบาล ร้อยละคำตอบเชิงบวกต่อมิติ · ทบทวนการเสียชีวิตและภาวะแทรกซ้อน · รายละเอียดแบบสำรวจรอสัญญาของ M12 · ต้นแบบก่อนสัญญาหน้าของ M12 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -99,7 +103,7 @@ export function CultureComponent() {
                   <th scope="col" className="w-status">{tx('สถานะ')}</th>
                 </tr></thead>
                 <tbody>
-                  {mm.map(m => (
+                  {pager.rows.map(m => (
                     <tr key={m.id} tabIndex={0} className={cx(m.id === selectedId && 'selected')} aria-selected={m.id === selectedId} onClick={() => pick(m.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(m.id); } }}>
                       <td><b>{m.id}</b><div className="secondary">{m.eventDate}</div></td>
                       <td><b>{m.pet}</b> · {tx(m.summary)}<div className="secondary">{tx('ผู้นำเสนอ {who}', { who: tx(m.presenter) })}{m.incidentId && <> · {m.incidentId}</>}</div></td>
@@ -111,6 +115,7 @@ export function CultureComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

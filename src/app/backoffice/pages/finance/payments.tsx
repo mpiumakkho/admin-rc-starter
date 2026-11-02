@@ -8,6 +8,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { ledger, PAYMENT_METHODS, PAYMENT_STATUS } from '../../data/finance';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 export function PaymentsComponent() {
   const store = useBackofficeStore();
@@ -28,6 +30,8 @@ export function PaymentsComponent() {
   const received = payments.reduce((s, r) => s + r.amount, 0);
   const refunded = -refunds.reduce((s, r) => s + r.amount, 0);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-payments className="page">
       <PageHead heading="รายการชำระเงิน" source="M11 · การรับชำระและการคืนเงินข้ามทุกใบแจ้งหนี้ · รับชำระทำที่ใบแจ้งหนี้" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -71,7 +75,7 @@ export function PaymentsComponent() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => {
+              {pager.rows.map(r => {
                 const ps = PAYMENT_STATUS[r.status === 'reversed' ? 'reversed' : 'completed'];
                 return (
                   <tr key={r.id} tabIndex={0} onClick={() => backofficeActions.openInvoice(r.invoice)} onKeyDown={event => { if (event.key === 'Enter') { backofficeActions.openInvoice(r.invoice); } }}>
@@ -90,6 +94,7 @@ export function PaymentsComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
       </div>
     </bo-payments>
   );

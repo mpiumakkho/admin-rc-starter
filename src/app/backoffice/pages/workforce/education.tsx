@@ -10,6 +10,8 @@ import type { CeCategory, CeRecord } from '../../data/types';
 import { APPROVED_COURSES, catalogCourse, CE_CATEGORY, CE_STATUS, ceProblems, ceReviewBlock, ceSummary, type CeInput, staffOf } from '../../data/workforce';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const CATEGORIES = Object.keys(CE_CATEGORY) as CeCategory[];
 const YEAR = TODAY.slice(0, 4);
@@ -37,6 +39,8 @@ export function EducationComponent() {
   const openCreate = () => { setSelectedId(null); setCreating(true); };
   const create = () => backofficeActions.addCe(listed ? { ...form, hours: listed.hours } : form, record => { setCreating(false); setForm(blank()); setSelectedId(record.id); });
 
+  /** The table's pages */
+  const pager = usePager(records);
   return (
     <bo-education className="page">
       <PageHead heading="การศึกษาต่อเนื่องและการอบรม" source="M24 P2 · หลักสูตรในรายการที่โรงพยาบาลรับรองนับชั่วโมงทันที · หลักสูตรอื่นรอผู้ตรวจที่ไม่ใช่ผู้เข้าอบรมพร้อมใบรับรอง · ต้นแบบก่อนสัญญาหน้าของ M24 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -77,7 +81,7 @@ export function EducationComponent() {
                 </tr>
               </thead>
               <tbody>
-                {records.map(c => (
+                {pager.rows.map(c => (
                   <tr key={c.id} tabIndex={0} className={cx(c.id === selectedId && 'selected')} aria-selected={c.id === selectedId} onClick={() => pick(c.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(c.id); } }}>
                     <td className="num">{c.date}</td>
                     <td>{tx(name(c))}</td>
@@ -89,6 +93,7 @@ export function EducationComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {creating ? (

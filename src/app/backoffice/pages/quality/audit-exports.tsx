@@ -8,6 +8,8 @@ import { EXPORT_PURPOSES, EXPORT_STATUS, exportDecideBlock, exportProblems, type
 import type { AuditShape } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const BLANK: ExportInput = { shape: 'patient', value: '', days: 30, purpose: '', reference: '' };
 
@@ -24,6 +26,8 @@ export function AuditExportsComponent() {
   const set = <K extends keyof ExportInput>(key: K, value: ExportInput[K]) => setForm({ ...form, [key]: value });
   const submit = () => backofficeActions.requestExport(form, x => { setForm({ ...BLANK }); setSelectedId(x.id); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-audit-exports className="page">
       <PageHead heading="คำขอส่งออก Audit" source="GOV-AUD-02 · M13 · GET /audit/v1/events/export พร้อม purpose และ approval_id · การดูไม่ใช่การส่งออก · ผู้ขออนุมัติตัวเองไม่ได้ · ทุกการส่งออกบันทึก audit.export.performed" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -43,7 +47,7 @@ export function AuditExportsComponent() {
                   <th scope="col" className="w-owner">{tx('ไฟล์ / หมดอายุ')}</th>
                 </tr></thead>
                 <tbody>
-                  {rows.map(x => (
+                  {pager.rows.map(x => (
                     <tr key={x.id} tabIndex={0} className={cx(x.id === selectedId && 'selected')} aria-selected={x.id === selectedId} onClick={() => pick(x.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(x.id); } }}>
                       <td><b>{x.id}</b><div className="secondary">{x.requestedAt}</div></td>
                       <td>{tx(SHAPE[x.shape])}{x.value && <> · {tx(x.value)}</>}<div className="secondary">{x.from} → {x.to} · {tx(x.requestedBy)}</div></td>
@@ -55,6 +59,7 @@ export function AuditExportsComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

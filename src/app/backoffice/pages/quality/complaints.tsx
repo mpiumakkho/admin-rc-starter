@@ -12,6 +12,8 @@ import {
 import type { Complaint, ComplaintCategory, ComplaintChannel } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 type View = 'open' | 'all' | 'resolved';
 const VIEWS: [View, string][] = [['open', 'ยังไม่ตอบ'], ['all', 'ทั้งหมด'], ['resolved', 'ตอบแล้ว']];
@@ -44,6 +46,8 @@ export function ComplaintsComponent() {
   const set = <K extends keyof ComplaintInput>(key: K, value: ComplaintInput[K]) => setForm({ ...form, [key]: value });
   const receive = () => backofficeActions.receiveComplaint(form, x => { setForm({ ...BLANK }); setView('open'); setSelectedId(x.id); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-complaints className="page">
       <PageHead heading="ข้อร้องเรียนทั้งหมด" source="M28 P2 · TAHSA-13 · รับทุกช่องทาง · คัดกรองภายใน 4 ชม. · ตอบกลับ รุนแรง 24 ชม. ปานกลาง 72 ชม. ต่ำ 7 วัน · ข้อร้องเรียนรุนแรงผู้อำนวยการลงนาม · ต้นแบบก่อนสัญญาหน้าของ M28 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -86,7 +90,7 @@ export function ComplaintsComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(x => {
+                  {pager.rows.map(x => {
                     const sla = slaState(x);
                     return (
                       <tr key={x.id} tabIndex={0} className={cx(x.id === selectedId && 'selected')} aria-selected={x.id === selectedId} onClick={() => pick(x.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(x.id); } }}>
@@ -105,6 +109,7 @@ export function ComplaintsComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

@@ -12,6 +12,8 @@ import {
 } from '../../data/workforce';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const TYPES = Object.keys(LEAVE_TYPE) as LeaveType[];
 const FROM = weekOf(TODAY);
@@ -104,6 +106,8 @@ export function LeaveComponent() {
     );
   };
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-leave className="page">
       <PageHead heading="การลาและวันหยุด" source="M24 P2 · คำขอลาและผลต่อจำนวนคนในเวร · ผู้ขอตัดสินคำขอของตัวเองไม่ได้ · การอนุมัติไม่ลบเวร ตารางเวรแสดงเวรที่ต้องหาคนแทน · ต้นแบบก่อนสัญญาหน้าของ M24 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -133,7 +137,7 @@ export function LeaveComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(l => {
+                  {pager.rows.map(l => {
                     const gapsN = l.status === 'pending' ? impactOf(l).gaps.length : 0;
                     return (
                       <tr key={l.id} tabIndex={0} className={cx(l.id === selectedId && 'selected')} aria-selected={l.id === selectedId} onClick={() => pick(l.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(l.id); } }}>
@@ -149,6 +153,7 @@ export function LeaveComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
 
           <div className="panel">

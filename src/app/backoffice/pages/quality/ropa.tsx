@@ -4,6 +4,8 @@ import { backofficeActions } from '../../backoffice-actions';
 import { useBackofficeStore } from '../../backoffice.store';
 import { ropaStale } from '../../data/governance';
 import { useBoI18n } from '../../i18n/bo-i18n';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 import { PageHead } from '../../shared/parts';
 
 export function RopaComponent() {
@@ -11,6 +13,8 @@ export function RopaComponent() {
   const { tx } = useBoI18n();
   const d = store.data;
   const last = d.ropaExports[0];
+  /** The table's pages */
+  const pager = usePager(d.ropa);
 
   return (
     <bo-ropa className="page">
@@ -32,7 +36,7 @@ export function RopaComponent() {
               <th scope="col" className="w-due">{tx('ทบทวนล่าสุด')}</th>
             </tr></thead>
             <tbody>
-              {d.ropa.map(r => (
+              {pager.rows.map(r => (
                 <tr key={r.id} className="static">
                   <td><b>{tx(r.activity)}</b><div className="secondary">{r.id} · {tx(r.purpose)} · {tx('ฐาน: {b}', { b: tx(r.basis) })}</div></td>
                   <td>{tx(r.dataKinds)}<div className="secondary">{tx(r.subjects)}</div></td>
@@ -44,6 +48,7 @@ export function RopaComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
       </div>
 
       <div className="panel">

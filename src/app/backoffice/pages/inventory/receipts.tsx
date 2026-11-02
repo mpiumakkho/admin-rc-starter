@@ -8,6 +8,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { CONTROL_SYSTEM, daysLeft, EXPIRY_BUCKETS, expiryBucket, locationsOf, monthToExpiry, receiptProblems, type ReceiptInput } from '../../data/inventory';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 export function ReceiptsComponent() {
   const store = useBackofficeStore();
@@ -57,6 +59,8 @@ export function ReceiptsComponent() {
     }
   };
 
+  /** The table's pages */
+  const pager = usePager(receipts);
   return (
     <bo-receipts className="page">
       <PageHead heading="รับยาเข้าคลัง" source="M06 · รับได้เฉพาะยาในทะเบียน · การบันทึกเพิ่มคงเหลือเมื่อระบบยืนยัน · ไม่มีใบสั่งซื้อหรือ supplier master ในหน้านี้ (procurement reserved)" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -107,7 +111,7 @@ export function ReceiptsComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {receipts.map(r => (
+                  {pager.rows.map(r => (
                     <tr key={r.id} tabIndex={0} onClick={() => backofficeActions.openItem(r.drug)} onKeyDown={event => { if (event.key === 'Enter') { backofficeActions.openItem(r.drug); } }}>
                       <td className="num">{r.at}</td>
                       <td><b>{r.drug}</b><div className="secondary">{r.id}{r.sourceRef && ` · ${r.sourceRef}`}</div></td>
@@ -123,6 +127,7 @@ export function ReceiptsComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

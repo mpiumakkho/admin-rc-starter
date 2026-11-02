@@ -5,6 +5,8 @@ import { cx } from '../../../user-management/ui';
 import { useBackofficeStore } from '../../backoffice.store';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 export function RetentionComponent() {
   const store = useBackofficeStore();
@@ -13,6 +15,8 @@ export function RetentionComponent() {
   const past = rows.reduce((n, d) => n + d.pastWindow, 0);
   const held = rows.filter(d => d.hold).length;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-retention className="page">
       <PageHead heading="นโยบายการเก็บรักษาข้อมูล" source="GOV-RET-01 · M31 · สถานะการเก็บต่อชุดข้อมูล (อ่านอย่างเดียว) · นโยบายตั้งที่ settings/11 · auto-purge เป็นงานของ backend · สัญญาการออกแบบ (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -36,7 +40,7 @@ export function RetentionComponent() {
               <th scope="col" className="w-status">{tx('สถานะการลบ')}</th>
             </tr></thead>
             <tbody>
-              {rows.map(d => (
+              {pager.rows.map(d => (
                 <tr key={d.id} className="static">
                   <td><b>{tx(d.dataset)}</b><div className="secondary">{tx(d.module)}{d.hold && <> · <span className="text-danger">{tx('ระงับการลบ: {why}', { why: tx(d.hold) })}</span></>}</div></td>
                   <td>{tx(d.policy)}</td>
@@ -49,6 +53,7 @@ export function RetentionComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
         <p className="secondary foot-note">{tx('แก้นโยบายที่ ตั้งค่าระบบ > นโยบายการเก็บรักษา (settings/11) · บันทึกตรวจสอบเก็บ 7 ปีตามกฎหมาย ดูที่')} <Link className="link" to="/backoffice/quality/audit-integrity">{tx('ตรวจความถูกต้อง Audit')}</Link></p>
       </div>
     </bo-retention>

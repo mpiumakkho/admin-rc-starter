@@ -30,11 +30,16 @@ test('the work overview gathers the modules\' work, filters it, and opens the so
   await openBackoffice(page);
   // The clinic's unpaid bills and short stock are on it beside the modules' own work
   await expect(page.locator('.kpi-strip')).toContainText('M11');
+  // Ten rows a page: the bill is found by its number
+  await expect(page.locator('.bo-table tbody tr')).toHaveCount(10);
+  await expect(page.locator('.pager-range')).toHaveText('Showing 1–10 of 24');
+  await page.locator('.filter-bar input[type=search]').fill('INV-2609-0112');
   await page.locator('.bo-table tbody tr', { hasText: 'INV-2609-0112' }).click();
   const drawer = page.locator('.drawer');
   await expect(drawer).toContainText('Receivable');
   await expect(drawer).toContainText('This module\'s page is not open in BackOffice yet');
   // A module's figure filters the table to it
+  await page.locator('.filter-bar input[type=search]').fill('');
   await page.locator('button.kpi', { hasText: 'M06' }).click();
   await expect(page.locator('.bo-table tbody tr')).toHaveCount(2);
   await page.locator('.bo-table tbody tr', { hasText: 'B-2312-04' }).click();
@@ -95,4 +100,34 @@ test('alerts: an exception is acknowledged with a note and moves to the acknowle
   await page.locator('button.kpi', { hasText: 'Critical' }).click();
   await page.locator('.bo-table tbody tr', { hasText: 'BU-2411-02' }).getByRole('link', { name: 'Open workflow' }).click();
   await expect(page).toHaveURL(/\/clinic\/ward$/);
+});
+
+test('the menu folds to its icons from the button on its edge: a group shows its pages beside it, and the fold is remembered', async ({ page }) => {
+  await openBackoffice(page);
+  const menu = page.getByRole('navigation', { name: 'Main menu' });
+  // One group open at a time, as the admin's menu
+  await menu.getByRole('button', { name: 'Finance & Revenue' }).click();
+  await expect(menu.getByRole('button', { name: 'Finance & Revenue' })).toHaveAttribute('aria-expanded', 'true');
+  await expect(menu.getByRole('button', { name: 'Home' })).toHaveAttribute('aria-expanded', 'false');
+
+  await page.getByRole('button', { name: 'Collapse menu' }).click();
+  await expect(page.locator('.body.collapsed')).toHaveCount(1);
+  await menu.getByRole('button', { name: 'Inventory' }).hover();
+  await menu.getByRole('link', { name: 'Medication inventory', exact: true }).click();
+  await expect(page).toHaveURL('/backoffice/inventory/stock');
+  await expectAccessible(page, 'the folded menu');
+
+  // By keyboard: the icon's pages open on focus and Escape hands focus back
+  await menu.getByRole('button', { name: 'Workforce & Scheduling' }).focus();
+  await expect(menu.getByRole('button', { name: 'Workforce & Scheduling' })).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Escape');
+  await expect(menu.getByRole('button', { name: 'Workforce & Scheduling' })).toBeFocused();
+  await expect(menu.getByRole('button', { name: 'Workforce & Scheduling' })).toHaveAttribute('aria-expanded', 'false');
+
+  await page.reload();
+  await expect(page.locator('.body.collapsed')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Expand menu' }).click();
+  await expect(page.locator('.body.collapsed')).toHaveCount(0);
+  await expect(menu.getByRole('button', { name: 'Inventory' })).toHaveAttribute('aria-expanded', 'true');
 });

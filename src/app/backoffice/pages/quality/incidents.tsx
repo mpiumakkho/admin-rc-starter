@@ -14,6 +14,8 @@ import {
 import type { SafetyCategory } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 type View = 'open' | 'all' | 'closed';
 const VIEWS: [View, string][] = [['open', 'ยังไม่ปิด'], ['all', 'ทั้งหมด'], ['closed', 'ปิดแล้ว']];
@@ -54,6 +56,8 @@ export function IncidentsComponent() {
     setSelectedId(i.id);
   });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-incidents className="page">
       <PageHead heading="รายงานอุบัติการณ์" source="M12 P2 · รายงานได้โดยไม่ระบุตัวตน · คัดกรองภายใน 24 ชม. เมื่ออันตรายรุนแรงขึ้นไป 72 ชม. สำหรับระดับอื่น · อันตรายรุนแรงขึ้นไปต้องมี RCA ก่อนปิด · ต้นแบบก่อนสัญญาหน้าของ M12 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -85,7 +89,7 @@ export function IncidentsComponent() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(i => (
+                  {pager.rows.map(i => (
                     <tr key={i.id} tabIndex={0} className={cx(i.id === selectedId && 'selected')} aria-selected={i.id === selectedId} onClick={() => pick(i.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(i.id); } }}>
                       <td><b>{i.id}</b><div className="secondary">{i.at}</div></td>
                       <td>{tx(i.description)}<div className="secondary">{tx(i.location)}{i.pet && <> · {i.pet}</>} · {tx(reporterOf(i))}</div></td>
@@ -103,6 +107,7 @@ export function IncidentsComponent() {
                 </tbody>
               </table>
             </div>
+            <PagerFoot pager={pager} />
           </div>
         </div>
 

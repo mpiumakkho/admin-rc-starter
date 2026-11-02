@@ -8,6 +8,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { AGING, type AgingKey, INVOICE_STATUS, receivables, statusOf } from '../../data/finance';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const aging = (key: AgingKey) => AGING.find(b => b.key === key)!;
 
@@ -18,6 +20,8 @@ export function ReceivablesComponent() {
   const ar = receivables(store.clinic.data);
   const rows = ar.rows.filter(r => !bucket || r.bucket === bucket);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-receivables className="page">
       <PageHead heading="ลูกหนี้คงค้าง" source="M11 · ใบแจ้งหนี้ที่ออกแล้วและยังชำระไม่ครบ · อายุหนี้นับจากวันครบกำหนดของแต่ละใบ" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -48,7 +52,7 @@ export function ReceivablesComponent() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {pager.rows.map(r => (
                 <tr key={r.invoice.id} tabIndex={0} onClick={() => backofficeActions.openInvoice(r.invoice)} onKeyDown={event => { if (event.key === 'Enter') { backofficeActions.openInvoice(r.invoice); } }}>
                   <td><b>{r.invoice.no}</b><div className="secondary">{tx(INVOICE_STATUS[statusOf(r.invoice)].label)}</div></td>
                   <td>{r.invoice.ownerKey}<div className="secondary">{`${r.invoice.pet} · ${tx(r.invoice.title)}`}</div></td>
@@ -64,6 +68,7 @@ export function ReceivablesComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
       </div>
     </bo-receivables>
   );

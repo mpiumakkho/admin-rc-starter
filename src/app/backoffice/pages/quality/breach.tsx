@@ -12,6 +12,8 @@ import { hoursLeft } from '../../data/quality';
 import type { Breach } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const BLANK: BreachInput = { title: '', discoveredAt: `${TODAY}T${NOW}`, source: '', description: '', count: '', kinds: '' };
 const hours = (b: Breach) => Math.max(0, Math.floor(hoursLeft(b.statutoryDue)));
@@ -36,6 +38,8 @@ export function BreachComponent() {
   const set = <K extends keyof BreachInput>(key: K, value: BreachInput[K]) => setForm({ ...form, [key]: value });
   const report = () => backofficeActions.reportBreach(form, b => { setReporting(false); setForm({ ...BLANK }); go(b); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-breach className="page">
       <PageHead heading="เหตุละเมิดข้อมูล" source="GOV-BRC-01 · M31 · แจ้ง สคส. ภายใน 72 ชม. นับจากพบเหตุ (เส้นตายจาก backend) · ระดับความรุนแรงกำหนดว่าต้องแจ้งใคร · สัญญาการออกแบบ (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -66,7 +70,7 @@ export function BreachComponent() {
                 <th scope="col" className="w-kind">{tx('แจ้ง สคส. แล้ว')}</th>
               </tr></thead>
               <tbody>
-                {rows.map(b => {
+                {pager.rows.map(b => {
                   const f = breachFlag(b);
                   return (
                     <tr key={b.id} tabIndex={0} onClick={() => go(b)} onKeyDown={event => { if (event.key === 'Enter') { go(b); } }}>
@@ -83,6 +87,7 @@ export function BreachComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {reporting && (

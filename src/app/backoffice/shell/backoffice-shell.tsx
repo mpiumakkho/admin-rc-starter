@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type MouseEvent, type SyntheticEvent } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import {
-  lucideAArrowDown, lucideAArrowUp, lucideAccessibility, lucideArrowLeft, lucideBell, lucideChevronRight, lucideDatabaseBackup, lucideLogOut, lucideMenu,
+  lucideAArrowDown, lucideAArrowUp, lucideAccessibility, lucideArrowLeft, lucideBell, lucideChevronLeft, lucideChevronRight, lucideDatabaseBackup, lucideLogOut, lucideMenu,
   lucideMoon, lucideStethoscope, lucideSun,
 } from '../../icons';
 import { LANGUAGES, useLanguage, type LanguageCode } from '../../layout/language.service';
@@ -32,6 +32,8 @@ const MENU_POSITION: UiConnectedPosition[] = [
 const CONTEXT = { tenant: 'SLV', hospital: 'โรงพยาบาลสวนหลวงสัตวแพทย์' };
 /** The groups with a page; the reserved ones never are here (nav.ts) */
 const GROUPS = BACKOFFICE_NAV.filter(g => g.links.length);
+const COLLAPSED_KEY = 'backoffice.sidebar.collapsed';
+const readCollapsed = () => { try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; } };
 
 /**
  * The back office: a sample of the hospital's administration (seph1-docs 26-backoffice-erp), in the app's own colors.
@@ -61,13 +63,45 @@ export function BackofficeShellComponent() {
 
   /** The menu, on narrow screens: open over the page */
   const [menuOpen, setMenuOpen] = useState(false);
-  /** The groups folded open or closed by hand; the one with the current page is open unless it was closed */
-  const [toggled, setToggled] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  /** The group with the current page */
   const current = BACKOFFICE_NAV.find(g => g.links.some(l => location.pathname.startsWith(l.path)))?.key;
-  const isOpen = (key: string) => toggled.get(key) ?? key === current;
+  /** The one group folded open, as the admin's menu: the current page's, until another is opened or this one closed */
+  const [openKey, setOpenKey] = useState<string | null>(current ?? 'home');
+  // Another page's group became current: it opens (state adjusted while rendering, as React advises)
+  const [openFor, setOpenFor] = useState(current);
+  if (openFor !== current) {
+    setOpenFor(current);
+    if (current) {
+      setOpenKey(current);
+    }
+  }
+  /** The menu folded to its icons (on wide screens), remembered on this device */
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+  /** Wide enough for the menu beside the page (992px); narrower, it slides in whole and never folds */
+  const [wide, setWide] = useState(true);
+  const folded = collapsed && wide;
+  /** Folded, the group whose pages show beside it, and how far down */
+  const [flyoutKey, setFlyoutKey] = useState<string | null>(null);
+  const [flyoutTop, setFlyoutTop] = useState(0);
+  const flyoutTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const refocusing = useRef(false);
+  const host = useRef<HTMLElement>(null);
 
-  // A page was picked: the menu makes way for it
-  useNavigationEnd(() => setMenuOpen(false));
+  // A page was picked: the menu makes way for it, and the group with it opens
+  useNavigationEnd(() => {
+    setMenuOpen(false);
+    setFlyoutKey(null);
+  });
+
+  useEffect(() => {
+    const element = host.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver(() => setWide(element.clientWidth >= 992));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     document.title = boI18n.t('SLV BackOffice — โรงพยาบาลสวนหลวงสัตวแพทย์');
@@ -82,7 +116,53 @@ export function BackofficeShellComponent() {
   const themeLabel = theme.isDark ? 'เปลี่ยนเป็นโหมดสว่าง' : 'เปลี่ยนเป็นโหมดมืด';
   const counts = store.counts;
 
-  const toggleGroup = (key: string) => setToggled(map => new Map(map).set(key, !isOpen(key)));
+  const showFlyout = (key: string, event: SyntheticEvent) => {
+    clearTimeout(flyoutTimer.current);
+    const group = (event.currentTarget as HTMLElement).closest('.nav-group');
+    // The page's display size zooms the document; the box is measured zoomed, the offset is set before zooming
+    const zoom = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    setFlyoutTop(Math.round((group?.getBoundingClientRect().top ?? 0) / zoom));
+    setFlyoutKey(key);
+  };
+  /** A short delay, so the pointer can cross from the icon to the pages */
+  const hideFlyout = () => {
+    clearTimeout(flyoutTimer.current);
+    flyoutTimer.current = setTimeout(() => setFlyoutKey(null), 120);
+  };
+  /** Opens a group and closes the one open, or closes it; folded, shows or hides its pages beside it */
+  const groupClicked = (key: string, event: MouseEvent) => {
+    if (folded) {
+      if (flyoutKey === key) { setFlyoutKey(null); } else { showFlyout(key, event); }
+      return;
+    }
+    setOpenKey(openKey === key ? null : key);
+  };
+  const groupFocused = (key: string, event: FocusEvent) => {
+    if (folded && !refocusing.current) {
+      showFlyout(key, event);
+    }
+  };
+  const flyoutLeft = (event: FocusEvent) => {
+    const group = (event.currentTarget as HTMLElement).closest('.nav-group');
+    if (!group?.contains(event.relatedTarget as Node | null)) {
+      hideFlyout();
+    }
+  };
+  /** Escape closes the pages and hands focus back to the group's icon, without opening them again */
+  const closeFlyout = (key: string, event: KeyboardEvent) => {
+    if (event.key !== 'Escape') {
+      return;
+    }
+    setFlyoutKey(null);
+    refocusing.current = true;
+    (document.querySelector(`[aria-controls="nav-${key}"]`) as HTMLElement | null)?.focus();
+    refocusing.current = false;
+  };
+  const toggleCollapsed = () => {
+    setCollapsed(!collapsed);
+    setFlyoutKey(null);
+    try { localStorage.setItem(COLLAPSED_KEY, collapsed ? '0' : '1'); } catch { /* the menu just opens wide next time */ }
+  };
 
   const stepScale = (event: MouseEvent) => {
     useUiScale.getState().step({ hold: event.detail > 0 });
@@ -111,7 +191,7 @@ export function BackofficeShellComponent() {
   const me = session.user;
 
   return (
-    <app-backoffice-shell className="backoffice">
+    <app-backoffice-shell ref={host} className={cx('backoffice', folded && 'collapsed')}>
       <a className="skip-link" href="#backoffice-main" onClick={skipToContent}>{tx('ข้ามไปเนื้อหาหลัก')}</a>
 
       {/* The bar along the top, built as the admin navbar is */}
@@ -194,37 +274,50 @@ export function BackofficeShellComponent() {
         </div>
       </header>
 
-      <div className="body">
+      <div className={cx('body', folded && 'collapsed')}>
         {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true"></div>}
-        {/* The spec's menu groups, those with a page */}
+        {/* The spec's menu groups, those with a page: one open at a time, the current page's; folded to its icons, each
+            group shows its pages beside it on hover or focus (seph1-fe's rail) */}
         <nav className={cx('sidebar', menuOpen && 'open')} id="backoffice-sidebar" aria-label={tx('เมนูหลัก')}>
           {GROUPS.map(group => {
-            const open = isOpen(group.key);
+            const open = !folded && openKey === group.key;
+            const shown = flyoutKey === group.key;
             return (
-              <div key={group.key} className={cx('nav-group', open && 'open')}>
-                <button type="button" className="nav-group-button" onClick={() => toggleGroup(group.key)} aria-expanded={open} aria-controls={`nav-${group.key}`}>
+              <div key={group.key} className={cx('nav-group', open && 'open', current === group.key && 'current')}
+                onMouseEnter={event => folded && showFlyout(group.key, event)} onMouseLeave={() => folded && hideFlyout()}>
+                <button type="button" className="nav-group-button" onClick={event => groupClicked(group.key, event)} onFocus={event => groupFocused(group.key, event)}
+                  aria-expanded={folded ? shown : open} aria-controls={`nav-${group.key}`} aria-label={folded ? tx(group.label) : undefined}>
                   <NgIcon svg={group.icon} className="nav-icon" aria-hidden="true" />
                   <span className="nav-title">{tx(group.label)}</span>
                   <NgIcon svg={lucideChevronRight} className="nav-arrow" aria-hidden="true" />
                 </button>
-                <ul className="nav-links" id={`nav-${group.key}`} inert={!open}>
-                  {group.links.map(link => (
-                    <Fragment key={link.path}>
-                      {link.section && <li className="nav-section">{tx(link.section)}</li>}
-                      <li>
-                        <NavLink to={link.path}>
-                          <span>{tx(link.label)}</span>
-                          {link.count && counts[link.count] > 0 && <span className="count">{counts[link.count]}</span>}
-                        </NavLink>
-                      </li>
-                    </Fragment>
-                  ))}
-                </ul>
+                <div className={cx('nav-links-wrap', folded && 'flyout', shown && 'shown')} style={folded ? { top: flyoutTop } : undefined}
+                  onMouseEnter={() => clearTimeout(flyoutTimer.current)} onBlur={flyoutLeft} onKeyDown={event => closeFlyout(group.key, event)}>
+                  <ul className="nav-links" id={`nav-${group.key}`} inert={folded ? !shown : !open}>
+                    {folded && <li className="flyout-title" aria-hidden="true">{tx(group.label)}</li>}
+                    {group.links.map(link => (
+                      <Fragment key={link.path}>
+                        {link.section && <li className="nav-section">{tx(link.section)}</li>}
+                        <li>
+                          <NavLink to={link.path}>
+                            <span>{tx(link.label)}</span>
+                            {link.count && counts[link.count] > 0 && <span className="count">{counts[link.count]}</span>}
+                          </NavLink>
+                        </li>
+                      </Fragment>
+                    ))}
+                  </ul>
+                </div>
               </div>
             );
           })}
           <p className="nav-note">{tx('เมนูอื่นจะเปิดเมื่อมีหน้าตามสัญญาของ spec · กลุ่มสงวน (จัดซื้อ งบประมาณ CAPEX payroll) ไม่มีในเมนู')}</p>
         </nav>
+        {/* Folds the menu to its icons and back, straddling its edge */}
+        <button type="button" className="sidebar-collapser" aria-label={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')} title={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')}
+          aria-expanded={!collapsed} aria-controls="backoffice-sidebar" onClick={toggleCollapsed}>
+          <NgIcon svg={lucideChevronLeft} aria-hidden="true" />
+        </button>
 
         <main ref={main} className="main" id="backoffice-main" tabIndex={-1}>
           <Outlet />

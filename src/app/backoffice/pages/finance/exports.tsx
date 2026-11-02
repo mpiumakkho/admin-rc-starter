@@ -10,6 +10,8 @@ import { DOC_TYPE, EXPORT_STATUS } from '../../data/finance';
 import type { AccountingExport } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STATUS_KEYS = Object.keys(EXPORT_STATUS) as AccountingExport['status'][];
 const DOC_TYPES = Object.keys(DOC_TYPE) as AccountingExport['docType'][];
@@ -29,6 +31,8 @@ export function ExportsComponent() {
   const selected = all.find(x => x.id === selectedId) ?? null;
   const pick = (x: AccountingExport) => setSelectedId(selectedId === x.id ? null : x.id);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-exports className="page">
       <PageHead heading="ส่งข้อมูลบัญชี" source="M11 · คิวส่งไป PEAK ชุดเดียวกับ Integration Center · สถานะส่งแล้วคือระบบบัญชีรับข้อมูล ไม่ใช่ e-Tax" freshness="รอบส่งล่าสุด 06:00" />
@@ -65,7 +69,7 @@ export function ExportsComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(x => (
+                {pager.rows.map(x => (
                   <tr key={x.id} className={cx(x.id === selectedId && 'selected')} tabIndex={0} onClick={() => pick(x)} onKeyDown={event => { if (event.key === 'Enter') { pick(x); } }} aria-selected={x.id === selectedId}>
                     <td><b>{x.id}</b></td>
                     <td>{x.document}<div className="secondary">{`${tx(DOC_TYPE[x.docType])} · ${tx('วันทำการ')} ${x.businessDate}`}</div></td>
@@ -80,6 +84,7 @@ export function ExportsComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

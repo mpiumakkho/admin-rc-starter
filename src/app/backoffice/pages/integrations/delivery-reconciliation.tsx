@@ -9,6 +9,8 @@ import { DOC_TYPE, EXPORT_STATUS } from '../../data/finance';
 import { OUTCOME, type Outcome, PERIODS, RECON_FORMULA, reconcileDeliveries, reconSummary } from '../../data/integrations';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STRIP: Outcome[] = ['awaiting', 'failed', 'missing', 'duplicate', 'variance'];
 const rank = (o: Outcome) => (o === 'delivered' ? 1 : 0);
@@ -26,6 +28,8 @@ export function DeliveryReconciliationComponent() {
   const pick = (key: string) => setSelectedKey(selectedKey === key ? null : key);
   const outcomeChip = (o: Outcome) => <span className={`chip ${OUTCOME[o].cls}`}>{tx(OUTCOME[o].label)}</span>;
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-delivery-reconciliation className="page">
       <PageHead heading="กระทบยอดการส่งบัญชี" source="INT-ACC-03 · M11 · เหตุการณ์ต้นทางเทียบกับรายการส่ง · ไม่รวมกระทบยอดธนาคาร GL หรือ e-Tax · สูตรเป็นต้นแบบ (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32 · ตัดยอด 23:00">
@@ -86,7 +90,7 @@ export function DeliveryReconciliationComponent() {
                 <th scope="col" className="w-status">{tx('ผล')}</th>
               </tr></thead>
               <tbody>
-                {rows.map(r => (
+                {pager.rows.map(r => (
                   <tr key={r.key} className={cx(r.key === selectedKey && 'selected')} tabIndex={0} onClick={() => pick(r.key)} onKeyDown={event => { if (event.key === 'Enter') { pick(r.key); } }} aria-selected={r.key === selectedKey}>
                     <td><b>{r.document}</b><div className="secondary">{tx(DOC_TYPE[r.docType])}</div></td>
                     <td className="num">{r.at}</td>
@@ -99,6 +103,7 @@ export function DeliveryReconciliationComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

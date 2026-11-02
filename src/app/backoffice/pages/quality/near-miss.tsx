@@ -13,6 +13,8 @@ import {
 import type { CatchPoint, SafetyCategory } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 type View = 'open' | 'all';
 const VIEWS: [View, string][] = [['open', 'รอมาตรการ'], ['all', 'ทั้งหมด']];
@@ -41,6 +43,8 @@ export function NearMissComponent() {
   const set = <K extends keyof NearMissInput>(key: K, value: NearMissInput[K]) => setForm({ ...form, [key]: value });
   const record = () => backofficeActions.recordNearMiss(form, n => { setRecording(false); setView('open'); setSelectedId(n.id); });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-near-miss className="page">
       <PageHead heading="เหตุเกือบพลาด" source="M12 P2 · ความผิดพลาดที่จับได้ก่อนถึงตัวผู้ป่วย · ทุกรายการต้องมีมาตรการป้องกัน · ยกระดับเป็นอุบัติการณ์ได้เมื่อพบว่าถึงตัวผู้ป่วยหรือเกิดซ้ำ · ต้นแบบก่อนสัญญาหน้าของ M12 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -71,7 +75,7 @@ export function NearMissComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(n => (
+                {pager.rows.map(n => (
                   <tr key={n.id} tabIndex={0} className={cx(n.id === selectedId && 'selected')} aria-selected={n.id === selectedId} onClick={() => pick(n.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(n.id); } }}>
                     <td><b>{n.id}</b><div className="secondary">{n.at}</div></td>
                     <td>{tx(n.description)}<div className="secondary">{tx(SAFETY_CATEGORY[n.category])} · {tx(n.location)}</div></td>
@@ -84,6 +88,7 @@ export function NearMissComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {recording ? (

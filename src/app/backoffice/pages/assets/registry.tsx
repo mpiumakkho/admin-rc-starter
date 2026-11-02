@@ -13,6 +13,8 @@ import {
 import type { Criticality, Equipment, EquipmentClass } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STATUSES: Equipment['status'][] = ['in-service', 'down', 'decommissioned'];
 const CRITS = Object.keys(CRITICALITY) as Criticality[];
@@ -51,6 +53,8 @@ export function RegistryComponent() {
     setSelectedId(e.id);
   });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-equipment-registry className="page">
       <PageHead heading="ทะเบียนอุปกรณ์" source="M22 P2 · ทะเบียนอุปกรณ์การแพทย์ตาม TAHSA-11 · ผูกเตียงกับผังเตียง M10 · ต้นทุนเป็นข้อมูลการดำเนินงาน ไม่ใช่ทะเบียนสินทรัพย์ทางบัญชี · ต้นแบบก่อนสัญญาหน้าของ M22 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -88,7 +92,7 @@ export function RegistryComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(e => {
+                {pager.rows.map(e => {
                   const r = readiness(d, e);
                   const pm = e.status === 'decommissioned' ? undefined : openPm(d, e.id);
                   const pmS = pmState(d, e);
@@ -112,6 +116,7 @@ export function RegistryComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {creating ? (

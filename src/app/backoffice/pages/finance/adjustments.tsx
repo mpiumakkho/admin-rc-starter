@@ -9,6 +9,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { adjustments, REFUND_STATUS } from '../../data/finance';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const statusCls = (status: string) => (status === 'requested' ? 'warn' : status === 'rejected' ? 'danger' : 'ok');
 const statusLabel = (status: string, kind: 'refund' | 'discount') =>
@@ -27,6 +29,8 @@ export function AdjustmentsComponent() {
     discounted: all.filter(r => r.kind === 'discount' && r.status === 'applied').reduce((s, r) => s + r.amount, 0),
   };
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-adjustments className="page">
       <PageHead heading="ส่วนลดและคืนเงิน" source="M11 · ขอได้จากใบแจ้งหนี้ · คืนเงินเกิน ฿500 และส่วนลดเกิน 10% ต้องให้ผู้จัดการการเงินอนุมัติ" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -61,7 +65,7 @@ export function AdjustmentsComponent() {
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
+              {pager.rows.map(r => (
                 <tr key={r.id} tabIndex={0} onClick={() => backofficeActions.openInvoice(r.invoice)} onKeyDown={event => { if (event.key === 'Enter') { backofficeActions.openInvoice(r.invoice); } }}>
                   <td className="num">{r.at}</td>
                   <td><b>{r.id}</b><div className="secondary">{tx(r.kind === 'refund' ? 'คืนเงิน' : 'ส่วนลด')}</div></td>
@@ -76,6 +80,7 @@ export function AdjustmentsComponent() {
             </tbody>
           </table>
         </div>
+        <PagerFoot pager={pager} />
       </div>
     </bo-adjustments>
   );

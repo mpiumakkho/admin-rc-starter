@@ -6,6 +6,8 @@ import { useBackofficeStore } from '../../backoffice.store';
 import { MODULES, type ActivityEntry, type Module } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, ModuleTag, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const MODULE_KEYS = Object.keys(MODULES) as Module[];
 
@@ -24,6 +26,8 @@ export function ActivityComponent() {
   const selected = store.data.activity.find(e => e.id === selectedId) ?? null;
   const pick = (e: ActivityEntry) => setSelectedId(selectedId === e.id ? null : e.id);
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-activity className="page">
       <PageHead heading="กิจกรรมล่าสุด" source="จากบันทึกตรวจสอบของ BackOffice ตามสิทธิ์ · อ่านอย่างเดียว ไม่ส่งออก" freshness="ข้อมูล ณ วันนี้ 11:32" />
@@ -53,7 +57,7 @@ export function ActivityComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(e => (
+                {pager.rows.map(e => (
                   <tr key={e.id} className={cx(e.id === selectedId && 'selected')} onClick={() => pick(e)} tabIndex={0} onKeyDown={event => { if (event.key === 'Enter') { pick(e); } }} aria-selected={e.id === selectedId}>
                     <td className="num">{e.at}</td>
                     <td>{tx(e.by)}</td>
@@ -66,6 +70,7 @@ export function ActivityComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {selected && (

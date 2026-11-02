@@ -1,18 +1,40 @@
 /* Small building blocks the back office's pages share; their look is in shell/backoffice.scss, under .backoffice */
 import type { ReactNode } from 'react';
+import { useLocation } from 'react-router';
 
-import { lucideX } from '../../icons';
+import { lucideChevronRight, lucideX } from '../../icons';
 import { NgIcon, UiButton } from '../../user-management/ui';
 import { MODULES, type Module } from '../data/types';
 import { useBoI18n } from '../i18n/bo-i18n';
+import { BACKOFFICE_NAV } from '../shell/nav';
 
-/** The head of a page: its name, where its data comes from and how fresh it is, and its actions on the right */
+/** The menu group a page is under, by the longest menu path its address starts with */
+function groupOf(url: string) {
+  let best: { group: (typeof BACKOFFICE_NAV)[number]; length: number } | undefined;
+  for (const group of BACKOFFICE_NAV) {
+    for (const link of group.links) {
+      if ((url === link.path || url.startsWith(link.path + '/')) && link.path.length > (best?.length ?? 0)) {
+        best = { group, length: link.path.length };
+      }
+    }
+  }
+  return best?.group;
+}
+
+/** The head of a page, as the admin's: its menu group's icon, the group leading into its name, where its data comes from and how fresh it is, and its actions on the right */
 export function PageHead({ heading, source, freshness, children }: { heading: string; source?: string; freshness?: string; children?: ReactNode }) {
   const { tx } = useBoI18n();
+  const group = groupOf(useLocation().pathname);
   return (
     <div className="page-head">
+      {group && <span className="page-icon" aria-hidden="true"><NgIcon svg={group.icon} /></span>}
       <div className="title-block">
-        <h1>{tx(heading)}</h1>
+        <div className="title-row">
+          {group && (
+            <nav className="crumbs" aria-label={tx('เส้นทาง')}><span>{tx(group.label)}</span><NgIcon svg={lucideChevronRight} className="crumb-separator" aria-hidden="true" /></nav>
+          )}
+          <h1>{tx(heading)}</h1>
+        </div>
         <div className="subtitle">
           {source && <span>{tx(source)}</span>}
           {freshness && <span className="freshness">{tx(freshness)}</span>}

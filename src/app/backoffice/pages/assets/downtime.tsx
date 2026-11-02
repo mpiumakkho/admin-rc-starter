@@ -10,6 +10,8 @@ import { active, addMonths, CRITICALITY, DOWNTIME_KIND, downtimeHours, downtimeP
 import type { Downtime } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const hours = (n: number | null) => (n === null ? '—' : n >= 100 ? Math.round(n).toLocaleString('en-US') : Number.isInteger(n) ? String(n) : n.toFixed(1));
 /** The twelve months to this one: 2025-10 … 2026-09 */
@@ -66,6 +68,8 @@ export function DowntimeComponent() {
     setSelectedId(x.id);
   });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-downtime className="page">
       <PageHead heading="การขัดข้องและหยุดใช้งาน" source="M22 P2 · MTBF ชั่วโมงที่ใช้งานได้ระหว่างการขัดข้อง · MTTR ชั่วโมงเฉลี่ยที่ใช้ซ่อม · คิดย้อนหลัง 12 เดือน · กลับมาใช้ได้เมื่อทดสอบแล้ว · ต้นแบบก่อนสัญญาหน้าของ M22 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -127,7 +131,7 @@ export function DowntimeComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(x => {
+                {pager.rows.map(x => {
                   const e = eq(x);
                   return (
                     <tr key={x.id} tabIndex={0} className={cx(x.id === selectedId && 'selected', !x.to && 'open')} aria-selected={x.id === selectedId} onClick={() => pick(x.id)} onKeyDown={event => { if (event.key === 'Enter') { pick(x.id); } }}>
@@ -143,6 +147,7 @@ export function DowntimeComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {creating ? (

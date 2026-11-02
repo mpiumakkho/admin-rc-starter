@@ -12,6 +12,8 @@ import { daysUntil } from '../../data/home';
 import type { ContractKind, ServiceContract } from '../../data/types';
 import { useBoI18n } from '../../i18n/bo-i18n';
 import { Drawer, PageHead } from '../../shared/parts';
+import { PagerFoot } from '../../shared/pager';
+import { usePager } from '../../shared/use-pager';
 
 const STRIP: ContractState[] = ['expired', 'd30', 'd60', 'd90', 'active'];
 const KINDS = Object.keys(CONTRACT_KIND) as ContractKind[];
@@ -54,6 +56,8 @@ export function ContractsComponent() {
     setSelectedId(k.id);
   });
 
+  /** The table's pages */
+  const pager = usePager(rows);
   return (
     <bo-contracts className="page">
       <PageHead heading="สัญญาบริการอุปกรณ์" source="M22 P2 · ผู้ให้บริการ ขอบเขต และวันหมดอายุ 30/60/90 วัน · อุปกรณ์ critical ต้องมีสัญญาซ่อมที่มีผล · ค่าบริการเป็นข้อมูลติดตาม ไม่ใช่การตั้งหนี้ · ต้นแบบก่อนสัญญาหน้าของ M22 (GATED)" freshness="ข้อมูล ณ วันนี้ 11:32">
@@ -90,7 +94,7 @@ export function ContractsComponent() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map(k => {
+                {pager.rows.map(k => {
                   const st = contractState(k);
                   const n = days(k);
                   return (
@@ -109,6 +113,7 @@ export function ContractsComponent() {
               </tbody>
             </table>
           </div>
+          <PagerFoot pager={pager} />
         </div>
 
         {creating ? (
