@@ -43,7 +43,7 @@ export function OverviewComponent() {
       <PageHead heading="ภาพรวมงาน" source="รวมจาก M11 M06 M22 M24 M28 M31 ตามสิทธิ์ · เปิดรายการต้นทางเพื่อแก้ไข" freshness="ข้อมูล ณ วันนี้ 11:32" />
 
       {/* How much waits, by module */}
-      <div className="kpi-strip" role="list">
+      <div className="kpi-strip tight" role="list">
         <div className="kpi" role="listitem"><span className="kpi-value">{items.length}</span><span className="kpi-label">{tx('รายการทั้งหมด')}</span></div>
         <div className="kpi danger" role="listitem"><span className="kpi-value">{critical}</span><span className="kpi-label">{tx('วิกฤต')}</span></div>
         {load.map(w => (
