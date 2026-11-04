@@ -5,6 +5,7 @@ import {
   lucideAArrowDown, lucideAArrowUp, lucideAccessibility, lucideArrowLeft, lucideBell, lucideChevronLeft, lucideChevronRight, lucideDatabaseBackup, lucideLogOut, lucideMenu,
   lucideMoon, lucideStethoscope, lucideSun,
 } from '../../icons';
+import { useContentAnimate } from '../../layout/content-animate';
 import { LANGUAGES, useLanguage, type LanguageCode } from '../../layout/language.service';
 import { useNavigationEnd } from '../../layout/navigation-end';
 import { session as sessionService, useSession } from '../../user-management/access/session';
@@ -16,6 +17,7 @@ import {
 } from '../../user-management/ui';
 import { setBackofficeNavigate } from '../backoffice-actions';
 import { backofficeUi } from '../backoffice-ui';
+import { preloadBackofficePages } from '../backoffice.routes';
 import { backofficeStore, useBackofficeStore } from '../backoffice.store';
 import { boI18n, useBoI18n } from '../i18n/bo-i18n';
 import './backoffice.scss';
@@ -55,6 +57,8 @@ export function BackofficeShellComponent() {
   const location = useLocation();
   const navigate = useNavigate();
   const main = useRef<HTMLElement>(null);
+  // Another page fades in where the page goes, the menu and bar staying put, as the admin's pages do
+  useContentAnimate(main);
 
   // The actions move between the workspace's pages with the router
   useLayoutEffect(() => {
@@ -88,7 +92,15 @@ export function BackofficeShellComponent() {
   const host = useRef<HTMLElement>(null);
 
   // A page was picked: the menu makes way for it, and the group with it opens
-  useNavigationEnd(() => {
+  const shownPath = useRef(location.pathname);
+  useNavigationEnd(next => {
+    // Another page starts at its top, as the admin's do; the query string alone keeps the place
+    if (next.pathname !== shownPath.current) {
+      shownPath.current = next.pathname;
+      if (main.current) {
+        main.current.scrollTop = 0;
+      }
+    }
     setMenuOpen(false);
     setFlyoutKey(null);
   });
@@ -108,6 +120,15 @@ export function BackofficeShellComponent() {
   }, [language]);
 
   useEffect(() => () => useUiScale.getState().release(), []);
+
+  // The other pages' code, while the browser is idle (not at all where it can't say when it is)
+  useEffect(() => {
+    if (typeof window.requestIdleCallback !== 'function') {
+      return;
+    }
+    const idle = window.requestIdleCallback(preloadBackofficePages);
+    return () => window.cancelIdleCallback(idle);
+  }, []);
 
   const otherLanguage: LanguageCode = LANGUAGES.find(lang => lang.code !== language)?.code ?? 'th';
   const languageLabel = `${language.toUpperCase()} · ${tx(SWITCH_TO[otherLanguage])}`;
@@ -319,7 +340,7 @@ export function BackofficeShellComponent() {
           <NgIcon svg={lucideChevronLeft} aria-hidden="true" />
         </button>
 
-        <main ref={main} className="main" id="backoffice-main" tabIndex={-1}>
+        <main ref={main} className="main" id="backoffice-main" tabIndex={-1} data-content-animate>
           <Outlet />
         </main>
       </div>

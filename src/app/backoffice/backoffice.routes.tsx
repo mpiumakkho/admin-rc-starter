@@ -91,3 +91,12 @@ export const BACKOFFICE_ROUTES: RouteObject[] = [
     ],
   },
 ];
+
+/** Every page's code, fetched once the back office is open, so moving between its pages never waits on a download */
+export function preloadBackofficePages(): void {
+  for (const route of BACKOFFICE_ROUTES[0].children ?? []) {
+    if (typeof route.lazy === 'function') {
+      void route.lazy();
+    }
+  }
+}

@@ -23,6 +23,10 @@ export function useContentAnimate(element: RefObject<HTMLElement | null>): void 
     if (!target || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches || document.body.classList.contains('ui-aaa')) {
       return;
     }
+    // A workspace inside it fades its own page (the back office's), so its menu and bar stay put
+    if (target.querySelector('[data-content-animate]')) {
+      return;
+    }
     target.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
   }, [pathname]);
 }
