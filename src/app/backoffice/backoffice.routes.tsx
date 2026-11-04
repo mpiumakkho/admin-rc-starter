@@ -92,11 +92,28 @@ export const BACKOFFICE_ROUTES: RouteObject[] = [
   },
 ];
 
-/** Every page's code, fetched once the back office is open, so moving between its pages never waits on a download */
-export function preloadBackofficePages(): void {
-  for (const route of BACKOFFICE_ROUTES[0].children ?? []) {
-    if (typeof route.lazy === 'function') {
-      void route.lazy();
+/**
+ * Every page's code, fetched once the back office is open, so moving between its pages never waits on a download: one
+ * page at a time, each when the browser is idle, so the page in view never waits on them. Returns the way to stop.
+ */
+export function preloadBackofficePages(): () => void {
+  const pending = (BACKOFFICE_ROUTES[0].children ?? []).flatMap(route => (typeof route.lazy === 'function' ? [route.lazy] : []));
+  let stopped = false;
+  let idle = 0;
+  const next = () => {
+    const load = pending.shift();
+    if (!load || stopped) {
+      return;
     }
-  }
+    void Promise.resolve(load()).finally(() => {
+      if (!stopped) {
+        idle = window.requestIdleCallback(next);
+      }
+    });
+  };
+  idle = window.requestIdleCallback(next);
+  return () => {
+    stopped = true;
+    window.cancelIdleCallback(idle);
+  };
 }

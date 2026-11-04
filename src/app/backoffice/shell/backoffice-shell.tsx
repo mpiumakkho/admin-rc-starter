@@ -2,8 +2,8 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState, type FocusEvent
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
 
 import {
-  lucideAArrowDown, lucideAArrowUp, lucideAccessibility, lucideArrowLeft, lucideBell, lucideChevronLeft, lucideChevronRight, lucideDatabaseBackup, lucideLogOut, lucideMenu,
-  lucideMoon, lucideStethoscope, lucideSun,
+  lucideAArrowDown, lucideAArrowUp, lucideAccessibility, lucideArrowLeft, lucideBell, lucideChevronRight, lucideDatabaseBackup, lucideLogOut, lucideMenu,
+  lucideMoon, lucidePanelLeft, lucideStethoscope, lucideSun,
 } from '../../icons';
 import { useContentAnimate } from '../../layout/content-animate';
 import { LANGUAGES, useLanguage, type LanguageCode } from '../../layout/language.service';
@@ -121,14 +121,9 @@ export function BackofficeShellComponent() {
 
   useEffect(() => () => useUiScale.getState().release(), []);
 
-  // The other pages' code, while the browser is idle (not at all where it can't say when it is)
-  useEffect(() => {
-    if (typeof window.requestIdleCallback !== 'function') {
-      return;
-    }
-    const idle = window.requestIdleCallback(preloadBackofficePages);
-    return () => window.cancelIdleCallback(idle);
-  }, []);
+  // The other pages' code, while the browser is idle; only from a build, as the development server compiles each file
+  // when asked and many at once overwhelm it (nor where the browser can't say when it is idle)
+  useEffect(() => (import.meta.env.PROD && typeof window.requestIdleCallback === 'function' ? preloadBackofficePages() : undefined), []);
 
   const otherLanguage: LanguageCode = LANGUAGES.find(lang => lang.code !== language)?.code ?? 'th';
   const languageLabel = `${language.toUpperCase()} · ${tx(SWITCH_TO[otherLanguage])}`;
@@ -225,6 +220,11 @@ export function BackofficeShellComponent() {
             <span className="logo" aria-hidden="true"><NgIcon svg={BRAND_ICON} /></span>
             <span className="brand-name">SLV <span className="brand-sub">BackOffice</span></span>
           </Link>
+          {/* Narrows the menu to its icons and back, as the admin navbar's button does */}
+          <button type="button" className="icon-button navbar-toggler" aria-label={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')} title={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')}
+            aria-controls="backoffice-sidebar" onClick={toggleCollapsed}>
+            <NgIcon svg={lucidePanelLeft} aria-hidden="true" />
+          </button>
         </div>
 
         {/* The tenant and hospital the work is in */}
@@ -298,8 +298,10 @@ export function BackofficeShellComponent() {
       <div className={cx('body', folded && 'collapsed')}>
         {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true"></div>}
         {/* The spec's menu groups, those with a page: one open at a time, the current page's; folded to its icons, each
-            group shows its pages beside it on hover or focus (seph1-fe's rail) */}
+            group shows its pages beside it on hover or focus (as the admin's) */}
         <nav className={cx('sidebar', menuOpen && 'open')} id="backoffice-sidebar" aria-label={tx('เมนูหลัก')}>
+          {/* Narrowed, the small logo heads the menu, as the admin's */}
+          {folded && <Link className="brand-mini" to="/backoffice" aria-label="SLV BackOffice"><span className="logo" aria-hidden="true"><NgIcon svg={BRAND_ICON} /></span></Link>}
           {GROUPS.map(group => {
             const open = !folded && openKey === group.key;
             const shown = flyoutKey === group.key;
@@ -334,12 +336,6 @@ export function BackofficeShellComponent() {
           })}
           <p className="nav-note">{tx('เมนูอื่นจะเปิดเมื่อมีหน้าตามสัญญาของ spec · กลุ่มสงวน (จัดซื้อ งบประมาณ CAPEX payroll) ไม่มีในเมนู')}</p>
         </nav>
-        {/* Folds the menu to its icons and back, straddling its edge */}
-        <button type="button" className="sidebar-collapser" aria-label={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')} title={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')}
-          aria-expanded={!collapsed} aria-controls="backoffice-sidebar" onClick={toggleCollapsed}>
-          <NgIcon svg={lucideChevronLeft} aria-hidden="true" />
-        </button>
-
         <main ref={main} className="main" id="backoffice-main" tabIndex={-1} data-content-animate>
           <Outlet />
         </main>
