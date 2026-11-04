@@ -23,6 +23,7 @@ import { boI18n, useBoI18n } from '../i18n/bo-i18n';
 import './backoffice.scss';
 import { DialogHost } from './dialog-host';
 import { BACKOFFICE_NAV, BRAND_ICON } from './nav';
+import { BackofficeSearch } from './search';
 
 const percent = (scale: number) => `${Math.round(scale * 100)}%`;
 const SWITCH_TO: Record<LanguageCode, string> = { th: 'เปลี่ยนเป็นภาษาไทย', en: 'เปลี่ยนเป็นภาษาอังกฤษ' };
@@ -234,6 +235,8 @@ export function BackofficeShellComponent() {
         </div>
 
         <div className="navbar-menu-wrapper">
+          {/* Search, as the admin's bar has it: the back office's pages and the work waiting */}
+          <BackofficeSearch />
           <ul className="navbar-actions">
             <li>
               <Link className="icon-button count-indicator" to="/backoffice/home/alerts" title={tx('การแจ้งเตือนและข้อยกเว้น')}
@@ -283,10 +286,6 @@ export function BackofficeShellComponent() {
                 }>
                   <button type="button" className="user-button" aria-label={`${tx('เมนูผู้ใช้')} · ${accountText(me, session.role?.name, session.roles.length)}`}>
                     <UiAvatar name={fullName(me)} src={me.avatar} size="sm" />
-                    <span className="user-text" aria-hidden="true">
-                      <span className="user-name">{fullName(me)}</span>{' '}
-                      <span className="user-role">{session.role?.name}{session.roles.length > 1 && ` +${session.roles.length - 1}`}</span>
-                    </span>
                   </button>
                 </UiMenuTrigger>
               </li>

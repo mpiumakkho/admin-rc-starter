@@ -13,10 +13,10 @@ import { ActivityText } from '../../user-management/shared/activity-text';
 import { RoleBadges } from '../../user-management/shared/badges';
 import { idleTimeoutLabel, useFormat } from '../../user-management/shared/formatting';
 import {
-  announce, cx, NgIcon, useMediaQuery, useUiAccessibleView, useUiScale, useUiTheme, UiAvatar, UiMenu, UiMenuDivider, UiMenuHeading, UiMenuItem,
-  UiMenuItemCheckbox, UiMenuItemRadio, UiMenuTrigger, UiSegmented, UiTooltip, type UiConnectedPosition, type UiOption,
+  announce, cx, NgIcon, useUiAccessibleView, useUiScale, useUiTheme, UiAvatar, UiMenu, UiMenuDivider, UiMenuHeading, UiMenuItem,
+  UiMenuItemCheckbox, UiMenuTrigger, UiTooltip, type UiConnectedPosition,
 } from '../../user-management/ui';
-import { LANGUAGES, useLanguage, type LanguageCode } from '../language.service';
+import { LANGUAGES, useLanguage } from '../language.service';
 import { useSidebarState } from '../sidebar/sidebar-state';
 import './navbar.scss';
 
@@ -31,14 +31,6 @@ const MENU_POSITION: UiConnectedPosition[] = [
   { originX: 'end', originY: 'bottom', overlayX: 'end', overlayY: 'top' },
   { originX: 'end', originY: 'top', overlayX: 'end', overlayY: 'bottom' },
 ];
-
-/** TH | EN on screen; each language's own name for screen readers, said in that language */
-const LANGUAGE_OPTIONS: UiOption<LanguageCode>[] = LANGUAGES.map(lang => ({
-  value: lang.code,
-  label: lang.code.toUpperCase(),
-  ariaLabel: lang.label,
-  lang: lang.code,
-}));
 
 // Search opens with Ctrl+K, or Cmd+K on a Mac
 const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
@@ -58,8 +50,9 @@ export function Navbar() {
   const uiScale = useUiScale();
   const accessibleView = useUiAccessibleView();
   const language = useLanguage();
-  /** Phones: the language switch moves from the bar into the account menu */
-  const isPhone = useMediaQuery('(max-width: 575.98px)');
+  /** The other language, and what a press on the language button does: "TH · Switch to English" */
+  const otherLanguage = LANGUAGES[(LANGUAGES.findIndex(lang => lang.code === language.current) + 1) % LANGUAGES.length].code;
+  const languageLabel = `${language.current.toUpperCase()} · ${t(otherLanguage === 'en' ? 'Switch to English' : 'Switch to Thai')}`;
   const search = useRef<HTMLInputElement>(null);
 
   /** How long before the app signs out someone who is away, when the settings say it should (WCAG 2.2.6) */
@@ -339,13 +332,15 @@ export function Navbar() {
             </li>
             <li className="navbar-divider" aria-hidden="true"></li>
 
-            {/* Both languages in view, one click to switch; on phones it moves into the account menu */}
-            <li className="language-item">
-              <UiSegmented className="language-switch" size="sm" options={LANGUAGE_OPTIONS} value={language.current} onValueChange={language.use} ariaLabel={t('Language')} />
+            {/* The language in use; a press switches to the other, as the back office's button does */}
+            <li>
+              <button type="button" className="icon-button language-button" title={languageLabel} aria-label={languageLabel} onClick={() => language.use(otherLanguage)}>
+                <span className="language-code">{language.current.toUpperCase()}</span>
+              </button>
             </li>
 
             {me && (
-              // On every screen size: profile and sign out live here. Below 1200px only the photo shows.
+              // On every screen size: profile and sign out live here. Only the photo shows; the name and role are in the menu's card.
               <li>
                 <UiMenuTrigger position={MENU_POSITION} menu={
                   // A menu holds only items, so the card is read out as the menu's description instead
@@ -360,16 +355,6 @@ export function Navbar() {
                       </div>
                     </div>
                     <UiMenuDivider />
-                    {isPhone && (
-                      <>
-                        <UiMenuHeading>{t('Language')}</UiMenuHeading>
-                        {LANGUAGE_OPTIONS.map(option => (
-                          <UiMenuItemRadio key={option.value} checked={option.value === language.current} lang={option.lang}
-                            onTriggered={() => language.use(option.value)}>{option.ariaLabel}</UiMenuItemRadio>
-                        ))}
-                        <UiMenuDivider />
-                      </>
-                    )}
                     <UiMenuItem icon={lucideUser} to={`/users/${me.id}`}>{t('My Profile')}</UiMenuItem>
                     <UiMenuItem icon={lucideShieldCheck} to={`/users/${me.id}?tab=security`}>{t('Security and devices')}</UiMenuItem>
                     {session.canSomewhere('activity.view') && (
@@ -385,11 +370,6 @@ export function Navbar() {
                 }>
                   <button type="button" className="user-button" aria-label={t('accountMenu', { name: accountText(me, session.role?.name, session.roles.length) })}>
                     <UiAvatar name={fullName(me)} src={me.avatar} size="sm" />
-                    <span className="user-text" aria-hidden="true">
-                      {/* A space between name and role, which the column does not show, so they read as words, as the button's name has them */}
-                      <span className="user-name">{fullName(me)}</span>{' '}
-                      <span className="user-role">{session.role?.name}{session.roles.length > 1 && ` +${session.roles.length - 1}`}</span>
-                    </span>
                   </button>
                 </UiMenuTrigger>
               </li>
