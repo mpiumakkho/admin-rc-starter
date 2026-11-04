@@ -237,11 +237,12 @@ export function Navbar() {
             <img src="assets/images/logo-light.svg" alt="logo" className="logo-light" />
           </Link>
           <Link className="navbar-brand brand-logo-mini" to="/"><img src="assets/images/logo-mini.svg" alt="logo" /></Link>
+        </div>
+        <div className="navbar-menu-wrapper">
+          {/* Narrows the menu to its icons and back: first in the bar, by the menu's edge, so the logo never has to move */}
           <button className="navbar-toggler icon-button" type="button" onClick={toggleSidebar} title={t('Toggle menu')} aria-label={t('Toggle menu')}>
             <NgIcon svg={lucidePanelLeft} />
           </button>
-        </div>
-        <div className="navbar-menu-wrapper">
           {/* Search on the left, where it is found first. On phones the search button opens it over the bar. */}
           {canSearch && (
             // People show as you type (an ARIA combobox): arrow keys pick one, Enter opens it, or the whole list when none is picked

@@ -99,9 +99,6 @@ export function Sidebar() {
       {state.open && <div className="sidebar-backdrop" onClick={state.close} aria-hidden="true"></div>}
       <nav className={cx('sidebar sidebar-offcanvas', state.open && 'active')} id="sidebar" aria-label={t('Main menu')}>
         <ul className="menu">
-          <li className="nav-item navbar-brand-mini-wrapper">
-            <Link className="nav-link navbar-brand brand-logo-mini" to="/"><img src="assets/images/logo-mini.svg" alt="logo" /></Link>
-          </li>
           {menu.map((section, sectionIndex) => (
             <Fragment key={sectionIndex}>
               {section.label && <li className="nav-item nav-category"><span className="nav-link">{t(section.label)}</span></li>}

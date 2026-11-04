@@ -220,12 +220,12 @@ export function BackofficeShellComponent() {
             <span className="logo" aria-hidden="true"><NgIcon svg={BRAND_ICON} /></span>
             <span className="brand-name">SLV <span className="brand-sub">BackOffice</span></span>
           </Link>
-          {/* Narrows the menu to its icons and back, as the admin navbar's button does */}
-          <button type="button" className="icon-button navbar-toggler" aria-label={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')} title={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')}
-            aria-controls="backoffice-sidebar" onClick={toggleCollapsed}>
-            <NgIcon svg={lucidePanelLeft} aria-hidden="true" />
-          </button>
         </div>
+        {/* Narrows the menu to its icons and back: first in the bar, by the menu's edge, as the admin's */}
+        <button type="button" className="icon-button navbar-toggler" aria-label={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')} title={tx(collapsed ? 'ขยายเมนู' : 'ย่อเมนู')}
+          aria-controls="backoffice-sidebar" onClick={toggleCollapsed}>
+          <NgIcon svg={lucidePanelLeft} aria-hidden="true" />
+        </button>
 
         {/* The tenant and hospital the work is in */}
         <div className="context" title={tx('บริบท: tenant และโรงพยาบาลตาม M14')}>
@@ -300,8 +300,6 @@ export function BackofficeShellComponent() {
         {/* The spec's menu groups, those with a page: one open at a time, the current page's; folded to its icons, each
             group shows its pages beside it on hover or focus (as the admin's) */}
         <nav className={cx('sidebar', menuOpen && 'open')} id="backoffice-sidebar" aria-label={tx('เมนูหลัก')}>
-          {/* Narrowed, the small logo heads the menu, as the admin's */}
-          {folded && <Link className="brand-mini" to="/backoffice" aria-label="SLV BackOffice"><span className="logo" aria-hidden="true"><NgIcon svg={BRAND_ICON} /></span></Link>}
           {GROUPS.map(group => {
             const open = !folded && openKey === group.key;
             const shown = flyoutKey === group.key;
